@@ -2,27 +2,25 @@ const puppeteer = require('puppeteer');
 const {XMLParser} = require('fast-xml-parser');
 const getWvKeys = require('./getwvkeys.js');
 const options = {
-    ignoreAttributes: false,
-    removeNSPrefix: true
+    ignoreAttributes: false, removeNSPrefix: true
 };
 const parser = new XMLParser(options);
 const fs = require('fs');
 const {unlink} = require('fs/promises');
 const {spawn} = require('child_process');
 const path = require("path");
-const {errors} = require("puppeteer");
 
 const WidevineProxyUrl = 'https://npo-drm-gateway.samgcloud.nepworldwide.nl/authentication';
 const keyArgString = '--key';
 
 //set as environment variable or replace with your own key
-const authKey = process.env.AUTH_KEY || ""
+const authKey = process.env.AUTH_KEY || "";
 const email = process.env.NPO_EMAIL || "";
 const password = process.env.NPO_PASSW || "";
 
 const videoPath = path.resolve("../", "./videos/") + '\\';
 
-const fileExists = async path => !!(await fs.promises.stat(path).catch(e => false));
+const fileExists = async path => !!(await fs.promises.stat(path).catch(() => false));
 
 const sleep = (milliseconds) => {
     return new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -35,14 +33,22 @@ async function npoLogin() {
     console.log('Running tests..');
     const page = await browser.newPage();
 
-    await page.goto('https://www.npostart.nl/login');
-    await page.waitForNetworkIdle();
+    await page.goto('https://npo.nl/start');
 
+    await page.waitForSelector('div[data-testid=\'btn-login\']');
+    await page.click('div[data-testid=\'btn-login\']');
+
+
+    await page.waitForSelector('#EmailAddress');
     await page.$eval('#EmailAddress', (el, secret) => el.value = secret, email);
     await page.$eval('#Password', (el, secret) => el.value = secret, password);
 
     await page.waitForSelector('button[value=\'login\']');
     await page.click('button[value=\'login\']');
+
+    await page.waitForSelector('button[class=\'group w-full cursor-pointer\']');
+    await page.click('button[class=\'group w-full cursor-pointer\']');
+
     await page.waitForNetworkIdle();
 
     await page.close();
@@ -50,20 +56,18 @@ async function npoLogin() {
 }
 
 
-
-/* 
+/*
 enter the video id here, you can find it in the url of the video, full url should look like this: https://www.npostart.nl/AT_300002877
-if the video id's are sequential you can use the second parameter to download multiple episodes
+if the video ids are sequential you can use the second parameter to download multiple episodes
 */
 
-getEpisodes("AT_300002877",1).then((data) => (console.log('succes')));
+getEpisodes("AT_300003151", 1).then((data) => (console.log('succes')));
 
-async function getEpisode(episodeId)
-{
-    return await getEpisodes(episodeId,1);
+async function getEpisode(episodeId) {
+    return await getEpisodes(episodeId, 1);
 }
 
-async function getEpisodes(firstId,episodeCount) {
+async function getEpisodes(firstId, episodeCount) {
     const promiseLogin = npoLogin();
 
     const index = firstId.indexOf('_') + 1;
@@ -98,13 +102,9 @@ async function getInformation(id) {
     const page = await browser.newPage();
 
     await page.goto(`https://www.npostart.nl/${id}`);
-    const iframe = await page.waitForSelector(`#iframe-${id}`);
-
-    const subtitle = await page.$eval('.player-header-sub-title', el => el.innerText);
-
-
-    const title = await page.$eval('.is-link', el => el.innerText);
-    const filename = generateFileName(title, subtitle);
+    // const iframe = await page.waitForSelector(`#iframe-${id}`);
+    await page.waitForSelector(`.bmpui-image`);
+    const filename = await generateFileName(page);
 
     console.log(filename);
     const keyPath = getKeyPath(filename);
@@ -114,54 +114,35 @@ async function getInformation(id) {
         console.log('information already gathered');
         return JSON.parse(fs.readFileSync(keyPath, 'utf8'));
     }
-
-    const iframeUrl = await (await iframe.getProperty('src'))._remoteObject.value;
-
-
-    await page.goto(iframeUrl);
-
-    const wideVineResponsePromise = page.waitForResponse((response) => {
-        if (response.url().startsWith(`https://start-player.npo.nl/video/${id}/streams`)) {
-            return response;
-        }
-    });
-    const streamResponsePromise = page.waitForResponse((response) => {
+    const mpdPromise = page.waitForResponse((response) => {
         if (response.url().endsWith('.mpd')) {
             return response;
         }
     });
 
-    await page.waitForSelector('#video_html5_api');
-    await page.click('#video_html5_api');
+    // wait for post request that ends with 'stream-link'
+    const streamResponsePromise = page.waitForResponse((response) => {
+        if (response.url().endsWith('stream-link') && response.request().method() === 'POST') {
+            return response;
+        }
+    });
+    // reload the page to get the stream link
+    const streamData = await (await streamResponsePromise).json();
+    const x_custom_data = streamData['stream']['drmToken'];
 
-    const streamResponse = await streamResponsePromise;
-    const wideVineResponse = await wideVineResponsePromise;
+    const mpdData = parser.parse(await (await mpdPromise).text());
+    const pssh = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"][3].pssh;
 
-    const mpdUrl = streamResponse.url();
-
-    console.log(mpdUrl);
-
-    const widevineRawResponse = await wideVineResponse.text();
-    const wideVineJson = JSON.parse(widevineRawResponse);
-    const streamResponseText = await streamResponse.text();
-    let jsonObj = parser.parse(streamResponseText);
-    
-    console.log(jsonObj.MPD.Period.AdaptationSet[1]);
-
-    const pssh = jsonObj.MPD.Period.AdaptationSet[1].ContentProtection[3].pssh;
-
-
-    const x_custom_data = wideVineJson.stream.keySystemOptions[0].options.httpRequestHeaders['x-custom-data'];
-
-    await page.close();
 
     const information = {
         "filename": filename,
         "pssh": pssh,
         "x_custom_data": x_custom_data,
-        "mpdUrl": mpdUrl,
+        "mpdUrl": streamData['stream']['streamURL'],
         "wideVineKeyResponse": null
     };
+
+    console.log(information);
 
     information.wideVineKeyResponse = ((await getWVKeys(pssh, x_custom_data)).trim());
 
@@ -213,7 +194,6 @@ async function downloadFromID(information) {
     filename = await downloadMpd(information.mpdUrl.toString(), filename);
 
     console.log(filename);
-
 
 
     return await decryptFiles(filename, information.wideVineKeyResponse.toString());
@@ -289,8 +269,8 @@ function keySubstring(response) {
 
 function getKeyFromCache(response, x_custom_data) {
     if (!response.includes("--key")) return null;
-    response = response.substring(response.indexOf('--key')+6, response.length);
-    response = response.replace('\r\n','')
+    response = response.substring(response.indexOf('--key') + 6, response.length);
+    response = response.replace('\r\n', '');
     return response;
 }
 
@@ -309,8 +289,7 @@ function downloadMpd(mpdUrl, filename) {
 
         stdout.on('readable', () => {
             stdoutData = stdout.read();
-            if (stdoutData != null)
-                console.log(stdoutData + `\t [${filename}]`);
+            if (stdoutData != null) console.log(stdoutData + `\t [${filename}]`);
         });
 
         stdout.on('end', () => {
@@ -330,14 +309,13 @@ function getWVKeys(pssh, x_custom_data) {
 
     return new Promise((resolve, reject) => {
         if (authKey === "") {
-            getL3Keys(pssh, x_custom_data).then((result)=>
-            {
+            getL3Keys(pssh, x_custom_data).then((result) => {
                 resolve(keySubstring(result));
             });
         }
-        const js_getWVKeys = new getWvKeys(pssh,WidevineProxyUrl, authKey,x_custom_data);
+        const js_getWVKeys = new getWvKeys(pssh, WidevineProxyUrl, authKey, x_custom_data);
         js_getWVKeys.getWvKeys().then((result) => {
-            resolve(result[0]['key'])
+            resolve(result[0]['key']);
         });
     });
 }
@@ -357,45 +335,23 @@ function getL3Keys(pssh, x_custom_data) {
     });
 }
 
-function generateFileName(serie, episode) {
-    let filename = serie.toString();
-    console.log(serie);
-    console.log(episode);
-    filename += ' - ';
-    const seizoenIndex = episode.indexOf('Seizoen');
-    if (seizoenIndex === -1) {
-        return serie;
-    }
+async function generateFileName(page) {
+    const rawSerie = page.$eval('.font-bold.font-npo-scandia.leading-130.text-30 .line-clamp-2', el => el["innerText"]);
+    const rawTitle = page.$eval('.font-bold.font-npo-scandia.leading-130.text-22', el => el["innerText"]);
+    const rawNumber = page.$eval('.mb-24 .flex.items-center .leading-130.text-13 .line-clamp-1', el => el["innerText"]);
+    const rawSeason = page.$eval('.bg-card-3.font-bold.font-npo-scandia.inline-flex.items-center', el => el["innerText"]);
 
-    episode = episode.substr(seizoenIndex, episode.length);
+    let filename = "";
 
+    filename += (await rawSerie) + " - ";
+    // remove word "Seizoen" from rawSeason
+    const seasonNumber = parseInt((await rawSeason).replace("Seizoen ", ""));
+    const episodeNumber = parseInt((await rawNumber).replace("Afl. ", "").split("•")[0]);
+    // add season and episode number to filename formatted as SxxExx
+    filename += "S" + seasonNumber.toString().padStart(2, '0') + "E" + episodeNumber.toString().padStart(2, '0') + " - ";
+    filename += (await rawTitle);
 
-    const lastDash = episode.lastIndexOf('-');
-    const episodeName = episode.substr(lastDash + 2, episode.length);
-
-    episode = episode.substr(0, lastDash - 1);
-
-    const aflLocation = episode.lastIndexOf('Afl. ');
-    let episodeNumber = episode.substr(aflLocation + 5, episode.length);
-
-    if (episodeNumber.length === 1) {
-        episodeNumber = '0' + episodeNumber;
-    }
-
-    episode = episode.substr(0, aflLocation - 1);
-
-    let season = episode.substr(episode.lastIndexOf(' ') + 1, episode.length);
-
-    if (season.length === 1) {
-        season = '0' + season;
-    }
-
-    filename += 'S' + season;
-    filename += 'E' + episodeNumber;
-    filename += ' - ' + episodeName;
-    filename = filename.replace('/','')
-    filename = filename.replace('.','')
-    return filename.replace(/[^ -~]/g, '');
+    return filename;
 }
 
 
