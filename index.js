@@ -17,14 +17,17 @@ const keyArgString = '--key';
 const authKey = process.env.AUTH_KEY || "";
 const email = process.env.NPO_EMAIL || "";
 const password = process.env.NPO_PASSW || "";
-
 const videoPath = path.resolve("../", "./videos/") + '\\';
 
-const fileExists = async path => !!(await fs.promises.stat(path).catch(() => false));
 
-const sleep = (milliseconds) => {
-    return new Promise(resolve => setTimeout(resolve, milliseconds));
-};
+
+/*
+enter the video id here, you can find it in the url of the video, full url should look like this: https://www.npostart.nl/AT_300003151
+if the video ids are sequential you can use the second parameter to download multiple episodes
+*/
+
+getEpisodes("AT_300003151", 1).then((data) => (console.log('succes')));
+
 
 let browser;
 
@@ -54,14 +57,6 @@ async function npoLogin() {
     await page.close();
 
 }
-
-
-/*
-enter the video id here, you can find it in the url of the video, full url should look like this: https://www.npostart.nl/AT_300002877
-if the video ids are sequential you can use the second parameter to download multiple episodes
-*/
-
-getEpisodes("AT_300003151", 1).then((data) => (console.log('succes')));
 
 async function getEpisode(episodeId) {
     return await getEpisodes(episodeId, 1);
@@ -309,29 +304,12 @@ function getWVKeys(pssh, x_custom_data) {
 
     return new Promise((resolve, reject) => {
         if (authKey === "") {
-            getL3Keys(pssh, x_custom_data).then((result) => {
-                resolve(keySubstring(result));
-            });
+            reject('no auth key');
         }
         const js_getWVKeys = new getWvKeys(pssh, WidevineProxyUrl, authKey, x_custom_data);
         js_getWVKeys.getWvKeys().then((result) => {
             resolve(result[0]['key']);
         });
-    });
-}
-
-function getL3Keys(pssh, x_custom_data) {
-    return new Promise((resolve, reject) => {
-        const python_getWVKeys = spawn('python', ["../wks-keys/L3.py", "-url", WidevineProxyUrl, "-pssh", pssh, "-data", x_custom_data]);
-
-        python_getWVKeys.stdout.on('data', (data) => {
-            resolve(data + '');
-        });
-
-        python_getWVKeys.stderr.on('error', (data) => {
-            reject(data);
-        });
-
     });
 }
 
@@ -354,6 +332,12 @@ async function generateFileName(page) {
     return filename;
 }
 
+
+const fileExists = async path => !!(await fs.promises.stat(path).catch(() => false));
+
+const sleep = (milliseconds) => {
+    return new Promise(resolve => setTimeout(resolve, milliseconds));
+};
 
 
 
