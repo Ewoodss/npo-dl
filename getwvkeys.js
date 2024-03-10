@@ -101,19 +101,19 @@ class getWvKeys {
 
         log("License Response Generated\n" + decrypterResponse.data.toString());
 
-        return decrypterResponse.JSON;
+        return decrypterResponse.data;
     }
 
     async getWvKeys() {
         let licenseData = await this.generate_request();
 
         if (licenseData["cache"] === true)
-            return licenseData["keys"];
+            return licenseData["keys"][0]['key'];
 
         let license_response = await this.post_request(licenseData["challenge"]);
         let decrypt_response = await this.decrypter(license_response);
 
-        return decrypt_response["keys"];
+        return decrypt_response["keys"][0];
     }
 
 

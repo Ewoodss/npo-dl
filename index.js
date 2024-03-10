@@ -11,7 +11,6 @@ const {spawn} = require('child_process');
 const path = require("path");
 
 const WidevineProxyUrl = 'https://npo-drm-gateway.samgcloud.nepworldwide.nl/authentication';
-const keyArgString = '--key';
 
 //set as environment variable or replace with your own key
 const authKey = process.env.AUTH_KEY || "";
@@ -20,14 +19,14 @@ const password = process.env.NPO_PASSW || "";
 const videoPath = path.resolve("../", "./videos/") + '\\';
 
 
-
 /*
 enter the video id here, you can find it in the url of the video, full url should look like this: https://www.npostart.nl/AT_300003151
 if the video ids are sequential you can use the second parameter to download multiple episodes
 */
 
-getEpisodes("AT_300003151", 1).then((data) => (console.log('succes')));
-
+getEpisodes("POW_05490242", 6).then((result) => {
+    console.log(result);
+});
 
 let browser;
 
@@ -65,21 +64,21 @@ async function getEpisode(episodeId) {
 async function getEpisodes(firstId, episodeCount) {
     const promiseLogin = npoLogin();
 
-    const index = firstId.indexOf('_') + 1;
+    const index = firstId.lastIndexOf('_') + 1;
 
-    const id = firstId.substr(index, firstId.length);
-    const prefix = firstId.substr(0, index);
+    const id = firstId.substring(index, firstId.length);
+    let prefix = firstId.substring(0, index);
+    // if id start with 0 add 0 to the prefix
+    if (id.startsWith('0')) {
+        prefix += '0';
+    }
 
     let informationList = [];
 
     await promiseLogin;
     for (let i = 0; i < episodeCount; i++) {
-        const newId = parseInt(id) + i;
-        console.log(newId);
-        const episodeId = prefix + (newId);
-        console.log(episodeId);
-
-        informationList.push(getInformation(episodeId));
+        const episodeId = prefix + (parseInt(id) + i);
+        informationList.push(getInformation(`https://www.npostart.nl/${episodeId}`));
 
         await sleep(5000);
     }
@@ -88,15 +87,29 @@ async function getEpisodes(firstId, episodeCount) {
     const list = await Promise.all(informationList);
     await browser.close();
 
-    for (const information of list) {
-        console.log(await downloadFromID(information));
-    }
+    return downloadMulti(list, true);
 }
 
-async function getInformation(id) {
+async function downloadMulti(InformationList, runParallel = false) {
+    if (runParallel === true) {
+        let downloadPromises = [];
+        for (const information of InformationList) {
+            downloadPromises.push(downloadFromID(information));
+        }
+        return await Promise.all(downloadPromises);
+    }
+
+    let result = [];
+    for (const information of InformationList) {
+        result.push(await downloadFromID(information));
+    }
+    return result;
+}
+
+async function getInformation(url) {
     const page = await browser.newPage();
 
-    await page.goto(`https://www.npostart.nl/${id}`);
+    await page.goto(url);
     // const iframe = await page.waitForSelector(`#iframe-${id}`);
     await page.waitForSelector(`.bmpui-image`);
     const filename = await generateFileName(page);
@@ -123,11 +136,15 @@ async function getInformation(id) {
     });
     // reload the page to get the stream link
     const streamData = await (await streamResponsePromise).json();
-    const x_custom_data = streamData['stream']['drmToken'];
+    const x_custom_data = streamData['stream']['drmToken'] || "";
 
     const mpdData = parser.parse(await (await mpdPromise).text());
-    const pssh = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"][3].pssh;
 
+    let pssh = "";
+    // check if the mpdData contains the necessary information
+    if ('ContentProtection' in mpdData["MPD"]["Period"]["AdaptationSet"][1]) {
+        pssh = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"][3].pssh || "";
+    }
 
     const information = {
         "filename": filename,
@@ -137,9 +154,14 @@ async function getInformation(id) {
         "wideVineKeyResponse": null
     };
 
-    console.log(information);
+    //if pssh and x_custom_data are not empty, get the keys
+    if (pssh.length !== 0 && x_custom_data.length !== 0) {
+        information.wideVineKeyResponse = ((await getWVKeys(pssh, x_custom_data)).trim());
+    } else {
+        console.log('probably no drm');
+    }
 
-    information.wideVineKeyResponse = ((await getWVKeys(pssh, x_custom_data)).trim());
+    console.log(information);
 
     await writeFile(keyPath, JSON.stringify(information));
 
@@ -163,11 +185,16 @@ async function writeFile(path, data) {
 }
 
 async function deleteFile(path) {
-    try {
-        await unlink(path.toString());
-        console.log(`successfully deleted ${path}`);
-    } catch (error) {
-        console.error('there was an error:', error.message);
+    // check if file exists
+    if (await fileExists(path)) {
+        try {
+            await unlink(path.toString());
+            console.log(`successfully deleted ${path}`);
+        } catch (error) {
+            console.error('there was an error:', error.message);
+        }
+    } else {
+        console.warn(`file ${path} does not exist`);
     }
 }
 
@@ -190,8 +217,13 @@ async function downloadFromID(information) {
 
     console.log(filename);
 
+    let key = null;
 
-    return await decryptFiles(filename, information.wideVineKeyResponse.toString());
+    if (information.wideVineKeyResponse !== null) {
+        key = information.wideVineKeyResponse.toString();
+    }
+
+    return await decryptFiles(filename, key);
 }
 
 
@@ -202,11 +234,17 @@ async function decryptFiles(filename, key) {
     const mp4File = videoPath + encryptedFilename + '.mp4';
     const m4aFile = videoPath + encryptedFilename + '.m4a';
 
-    const mp4Decrypted = mp4Decrypt(mp4File, key);
-    const m4aDecrypted = mp4Decrypt(m4aFile, key);
-    let [mp4DecryptedFile, m4aDecryptedFile] = await Promise.all([mp4Decrypted, m4aDecrypted]);
+    //if key is none then file probably not encrypted
+    let [mp4DecryptedFile, m4aDecryptedFile] = [mp4File, m4aFile];
+
+    if (key != null) {
+        const mp4Decrypted = mp4Decrypt(mp4File, key);
+        const m4aDecrypted = mp4Decrypt(m4aFile, key);
+        [mp4DecryptedFile, m4aDecryptedFile] = await Promise.all([mp4Decrypted, m4aDecrypted]);
+    }
 
     const resultFileName = await combineVideoAndAudio(filename, mp4DecryptedFile, m4aDecryptedFile);
+
     await sleep(1000);
 
     if (await fileExists(resultFileName)) {
@@ -255,24 +293,6 @@ function mp4Decrypt(encryptedFilename, key) {
         });
 
     });
-
-}
-
-function keySubstring(response) {
-    return response.substr(1 + response.lastIndexOf(keyArgString) + keyArgString.length, response.length);
-}
-
-function getKeyFromCache(response, x_custom_data) {
-    if (!response.includes("--key")) return null;
-    response = response.substring(response.indexOf('--key') + 6, response.length);
-    response = response.replace('\r\n', '');
-    return response;
-}
-
-
-function getCustomDataStart(x_custom_data) {
-    return (x_custom_data.substr(0, x_custom_data.indexOf('.')));
-
 }
 
 function downloadMpd(mpdUrl, filename) {
@@ -308,7 +328,7 @@ function getWVKeys(pssh, x_custom_data) {
         }
         const js_getWVKeys = new getWvKeys(pssh, WidevineProxyUrl, authKey, x_custom_data);
         js_getWVKeys.getWvKeys().then((result) => {
-            resolve(result[0]['key']);
+            resolve(result);
         });
     });
 }
@@ -328,6 +348,9 @@ async function generateFileName(page) {
     // add season and episode number to filename formatted as SxxExx
     filename += "S" + seasonNumber.toString().padStart(2, '0') + "E" + episodeNumber.toString().padStart(2, '0') + " - ";
     filename += (await rawTitle);
+
+    // remove illegal characters from filename
+    filename = filename.replace(/[/\\?%*:|"<>]/g, '#');
 
     return filename;
 }
