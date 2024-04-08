@@ -16,7 +16,14 @@ const WidevineProxyUrl = 'https://npo-drm-gateway.samgcloud.nepworldwide.nl/auth
 const authKey = process.env.AUTH_KEY || "";
 const email = process.env.NPO_EMAIL || "";
 const password = process.env.NPO_PASSW || "";
-const videoPath = path.resolve("../", "./videos/") + '\\';
+const videoPath = path.resolve("./videos") + "/";
+
+if (!fs.existsSync(videoPath)) {
+    fs.mkdirSync(videoPath);
+    fs.mkdirSync(videoPath + '/keys');
+}
+
+
 
 
 /*
@@ -24,7 +31,11 @@ enter the video id here, you can find it in the url of the video, full url shoul
 if the video ids are sequential you can use the second parameter to download multiple episodes
 */
 
-getEpisodes("POW_05490242", 6).then((result) => {
+// getEpisodesInOrder("AT_300003161", 1).then((result) => {
+//     console.log(result);
+// });
+
+getEpisode("https://npo.nl/start/serie/flikken-maastricht/seizoen-11/undercover_1/afspelen").then((result) => {
     console.log(result);
 });
 
@@ -57,13 +68,15 @@ async function npoLogin() {
 
 }
 
-async function getEpisode(episodeId) {
-    return await getEpisodes(episodeId, 1);
+async function getEpisode(url) {
+    const promiseLogin = npoLogin();
+    await promiseLogin;
+    const result = await getInformation(url);
+    await browser.close();
+    return downloadFromID(result);
 }
 
-async function getEpisodes(firstId, episodeCount) {
-    const promiseLogin = npoLogin();
-
+async function getEpisodesInOrder(firstId, episodeCount) {
     const index = firstId.lastIndexOf('_') + 1;
 
     const id = firstId.substring(index, firstId.length);
@@ -72,14 +85,22 @@ async function getEpisodes(firstId, episodeCount) {
     if (id.startsWith('0')) {
         prefix += '0';
     }
-
-    let informationList = [];
-
-    await promiseLogin;
+    const urls = [];
     for (let i = 0; i < episodeCount; i++) {
         const episodeId = prefix + (parseInt(id) + i);
-        informationList.push(getInformation(`https://www.npostart.nl/${episodeId}`));
+        urls.push(`https://www.npostart.nl/${episodeId}`);
+    }
+    return getEpisodes(urls)
+}
 
+
+
+async function getEpisodes(urls) {
+    const promiseLogin = npoLogin();
+    let informationList = [];
+    await promiseLogin;
+    for (const npo_url of urls) {
+        informationList.push(getInformation(npo_url));
         await sleep(5000);
     }
 
@@ -237,13 +258,15 @@ async function decryptFiles(filename, key) {
     //if key is none then file probably not encrypted
     let [mp4DecryptedFile, m4aDecryptedFile] = [mp4File, m4aFile];
 
+    // if (key != null) {
+    //     const mp4Decrypted = mp4Decrypt(mp4File, key);
+    //     const m4aDecrypted = mp4Decrypt(m4aFile, key);
+    //     [mp4DecryptedFile, m4aDecryptedFile] = await Promise.all([mp4Decrypted, m4aDecrypted]);
+    // }
     if (key != null) {
-        const mp4Decrypted = mp4Decrypt(mp4File, key);
-        const m4aDecrypted = mp4Decrypt(m4aFile, key);
-        [mp4DecryptedFile, m4aDecryptedFile] = await Promise.all([mp4Decrypted, m4aDecrypted]);
+        key = key.split(':')[1];
     }
-
-    const resultFileName = await combineVideoAndAudio(filename, mp4DecryptedFile, m4aDecryptedFile);
+    const resultFileName = await combineVideoAndAudio(filename, mp4DecryptedFile, m4aDecryptedFile, key);
 
     await sleep(1000);
 
@@ -257,65 +280,41 @@ async function decryptFiles(filename, key) {
     return resultFileName;
 }
 
-async function combineVideoAndAudio(filename, video, audio) {
-    const combinedFileName = videoPath + filename + '.mkv';
-
+async function runCommand(command, args,result) {
     return new Promise((resolve, reject) => {
-        const cmd_ffmpeg = spawn('ffmpeg', ['-i', video, '-i', audio, '-c', 'copy', combinedFileName]);
-        const stdout = cmd_ffmpeg.stdout;
+        const cmd = spawn(command, args);
+        const stdout = cmd.stdout;
+        let stdoutData = null;
 
         stdout.on('end', () => {
-            console.log(`finished combining: ${video} and ${audio} result  ${combinedFileName}`);
-            resolve(combinedFileName);
+            console.log(`finished: ${command} ${args}`);
+            resolve(result);
         });
-
-        cmd_ffmpeg.stderr.on('', (data) => {
-            reject(data);
-        });
-
-    });
-
-}
-
-function mp4Decrypt(encryptedFilename, key) {
-    const decryptedFileName = videoPath + encryptedFilename.substr(encryptedFilename.indexOf('#') + 1, encryptedFilename.length);
-    return new Promise((resolve, reject) => {
-        const cmd_mp4decrypt = spawn('../mp4decrypt.exe', ['--show-progress', '--key', key, encryptedFilename, decryptedFileName.toString()]);
-        const stdout = cmd_mp4decrypt.stdout;
-
-        stdout.on('close', () => {
-            console.log(`finished decrypting: ${encryptedFilename}`);
-            resolve(decryptedFileName);
-        });
-
-        cmd_mp4decrypt.stderr.on('', (data) => {
-            reject(data);
-        });
-
-    });
-}
-
-function downloadMpd(mpdUrl, filename) {
-    const filenameFormat = 'encrypted#' + filename + '.%(ext)s';
-    return new Promise((resolve, reject) => {
-        const cmd_downloadMpd = spawn('../yt-dlp.exe', ['--allow-u', '--downloader', 'aria2c', '-f', 'bv,ba', '-P', "../videos", '-o', filenameFormat, mpdUrl]);
-        const stdout = cmd_downloadMpd.stdout;
-        let stdoutData = null;
 
         stdout.on('readable', () => {
             stdoutData = stdout.read();
-            if (stdoutData != null) console.log(stdoutData + `\t [${filename}]`);
+            if (stdoutData != null) console.log(stdoutData + `\t [${result}]`);
         });
 
-        stdout.on('end', () => {
-            resolve(filename + '');
-        });
-
-        cmd_downloadMpd.stderr.on('error', (data) => {
+        cmd.stderr.on('error', (data) => {
             reject(data);
         });
 
     });
+}
+
+async function combineVideoAndAudio(filename, video, audio,key) {
+    const combinedFileName = videoPath + filename + '.mkv';
+    let args = ['-i', video, '-i', audio, '-c', 'copy', combinedFileName];
+    if (key != null) {
+        args =['-decryption_key', key,'-i', video,'-decryption_key', key, '-i', audio, '-c', 'copy', combinedFileName];
+    }
+    return runCommand('ffmpeg', args, combinedFileName);
+}
+async function downloadMpd(mpdUrl, filename) {
+    const filenameFormat = 'encrypted#' + filename + '.%(ext)s';
+    const args = ['--allow-u', '--downloader', 'aria2c', '-f', 'bv,ba', '-P', videoPath, '-o', filenameFormat, mpdUrl]
+    return runCommand('yt-dlp', args,filename);
 }
 
 
