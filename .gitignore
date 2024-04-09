@@ -255,3 +255,7 @@ fabric.properties
 .idea/**/azureSettings.xml
 
 # End of https://www.toptal.com/developers/gitignore/api/node,webstorm
+
+videos/*.mkv
+videos/keys/*.json
+.DS_Store

@@ -20,7 +20,11 @@ winget install yt-dlp
 sudo apt install ffmpeg
 sudo apt install yt-dlp
 ```
-
+### for macos
+```bash
+brew install ffmpeg
+brew install yt-dlp
+```
 
 
 ## the following environment variables are required
