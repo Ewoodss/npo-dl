@@ -23,13 +23,16 @@ if (!fs.existsSync(videoPath)) {
     fs.mkdirSync(videoPath + '/keys');
 }
 
+let browser = null;
 
 //enter the npo start show name and download all episodes from all seasons.
 //second parameter = season count (0 = all)
 //third parameter = reverse seasons (false = Start from latest, true = Start from first)
 
 getAllEpisodesFromShow("keuringsdienst-van-waarde", 2, true).then((urls) => {
-    getEpisodes(urls);
+    getEpisodes(urls).then((result) => {
+        console.log(result);
+    });
 });
 
 
@@ -53,10 +56,12 @@ if the video ids are sequential you can use the second parameter to download mul
 //    console.log(result);
 //});
 
-let browser;
-
 async function npoLogin() {
-    browser = await puppeteer.launch({headless: false});
+    // check if browser is already running
+    if (browser === null) {
+        browser = await puppeteer.launch({headless: false});
+    }
+
     console.log('Running tests..');
     const page = await browser.newPage();
 
@@ -108,11 +113,13 @@ async function getEpisodesInOrder(firstId, episodeCount) {
         const episodeId = prefix + (parseInt(id) + i);
         urls.push(`https://www.npostart.nl/${episodeId}`);
     }
-    return getEpisodes(urls)
+    return getEpisodes(urls);
 }
 
-async function getAllEpisodesFromShow(show, seasonCount=0, reverse=false) {
-    browser = await puppeteer.launch({headless: false});
+async function getAllEpisodesFromShow(show, seasonCount = 0, reverse = false) {
+    if (browser == null) {
+        browser = await puppeteer.launch({headless: false});
+    }
     const page = await browser.newPage();
 
     const urls = [];
@@ -122,27 +129,26 @@ async function getAllEpisodesFromShow(show, seasonCount=0, reverse=false) {
     const jsonData = await page.evaluate(() => {
         return JSON.parse(document.getElementById('__NEXT_DATA__').innerText) || null;
     });
-    
+
     if (jsonData === null) {
         console.log('Error retrieving show data');
         return null;
     }
 
     await page.close();
-    await browser.close();
 
-    const seasons = reverse 
-    ? jsonData['props']['pageProps']['dehydratedState']['queries'][1]['state']['data'].reverse() 
-    : jsonData['props']['pageProps']['dehydratedState']['queries'][1]['state']['data'];
+    const seasons = reverse
+        ? jsonData['props']['pageProps']['dehydratedState']['queries'][1]['state']['data'].reverse()
+        : jsonData['props']['pageProps']['dehydratedState']['queries'][1]['state']['data'];
 
     const seasonsLength = seasonCount !== 0 ? seasonCount : seasons.length;
 
 
-    for (var i = 0; i < seasonsLength; i++){
+    for (let i = 0; i < seasonsLength; i++) {
         let season = seasons[i]['slug'];
         console.log(season);
         let seasonUrls = await getAllEpisodesFromSeason(show, season, reverse);
-        for (var x = 0; x < seasonUrls.length; x++) {
+        for (let x = 0; x < seasonUrls.length; x++) {
             console.log(seasonUrls[x]);
             urls.push(seasonUrls[x]);
         }
@@ -151,8 +157,10 @@ async function getAllEpisodesFromShow(show, seasonCount=0, reverse=false) {
     return urls;
 }
 
-async function getAllEpisodesFromSeason(show, season=0, reverse=false) {
-    browser = await puppeteer.launch({headless: false});
+async function getAllEpisodesFromSeason(show, season = 0, reverse = false) {
+    if (browser == null) {
+        browser = await puppeteer.launch({headless: false});
+    }
     const page = await browser.newPage();
 
     const urls = [];
@@ -171,10 +179,10 @@ async function getAllEpisodesFromSeason(show, season=0, reverse=false) {
     }
 
     const episodes = reverse
-    ? jsonData['props']['pageProps']['dehydratedState']['queries'][2]['state']['data'].reverse()
-    : jsonData['props']['pageProps']['dehydratedState']['queries'][2]['state']['data'];
+        ? jsonData['props']['pageProps']['dehydratedState']['queries'][2]['state']['data'].reverse()
+        : jsonData['props']['pageProps']['dehydratedState']['queries'][2]['state']['data'];
 
-    for (var x = 0; x < episodes.length; x++){
+    for (let x = 0; x < episodes.length; x++) {
         let programKey = episodes[x]['programKey'];
         let slug = episodes[x]['slug'];
         let productId = episodes[x]['productId'];
@@ -183,7 +191,6 @@ async function getAllEpisodesFromSeason(show, season=0, reverse=false) {
     }
 
     await page.close();
-    await browser.close();
 
     return urls;
 }
@@ -222,15 +229,15 @@ async function downloadMulti(InformationList, runParallel = false) {
 
 async function getInformation(url) {
     let tries = 0;
-    while(tries <= 3) {
+    while (tries <= 3) {
         tries++;
         try {
             const page = await browser.newPage();
 
             await page.goto(url);
-            if(page.url() === "https://npo.nl/start") {
+            if (page.url() === "https://npo.nl/start") {
                 await page.close();
-                console.log(`Error wrong episode ID ${url}`)
+                console.log(`Error wrong episode ID ${url}`);
                 return null;
             }
 
@@ -259,7 +266,7 @@ async function getInformation(url) {
                     return response;
                 }
             });
-            
+
             // reload the page to get the stream link
             await page.reload();
             const streamData = await (await streamResponsePromise).json();
@@ -267,9 +274,9 @@ async function getInformation(url) {
             let x_custom_data = "";
             try {
                 x_custom_data = streamData['stream']['drmToken'] || "";
-            } catch(TypeError) {
+            } catch (TypeError) {
                 const pageContent = await page.content();
-                if(pageContent.includes("Alleen te zien met NPO Plus")) {
+                if (pageContent.includes("Alleen te zien met NPO Plus")) {
                     console.log('Error content needs NPO Plus subscription');
                     return null;
                 }
@@ -299,17 +306,18 @@ async function getInformation(url) {
             }
 
             await writeFile(keyPath, JSON.stringify(information));
-            
+
             page.close();
             console.log(information);
             return information;
-        } catch(e) {
+        } catch (e) {
             console.log(`Error retrieving information, try ${tries}/3 (${url})`);
             console.log(e);
             await sleep(5000);
-            try{
+            try {
                 await page.close();
-            } catch(E){}
+            } catch (E) {
+            }
         }
     }
 }
@@ -346,10 +354,10 @@ async function deleteFile(path) {
 
 
 async function downloadFromID(information) {
-    if(information === null) {
+    if (information === null) {
         return null;
     }
-    
+
     let filename = information.filename.toString();
 
     console.log(filename);
@@ -409,7 +417,7 @@ async function decryptFiles(filename, key) {
     return resultFileName;
 }
 
-async function runCommand(command, args,result) {
+async function runCommand(command, args, result) {
     return new Promise((resolve, reject) => {
         const cmd = spawn(command, args);
         const stdout = cmd.stdout;
@@ -432,18 +440,19 @@ async function runCommand(command, args,result) {
     });
 }
 
-async function combineVideoAndAudio(filename, video, audio,key) {
+async function combineVideoAndAudio(filename, video, audio, key) {
     const combinedFileName = videoPath + filename + '.mkv';
     let args = ['-i', video, '-i', audio, '-c', 'copy', combinedFileName];
     if (key != null) {
-        args =['-decryption_key', key,'-i', video,'-decryption_key', key, '-i', audio, '-c', 'copy', combinedFileName];
+        args = ['-decryption_key', key, '-i', video, '-decryption_key', key, '-i', audio, '-c', 'copy', combinedFileName];
     }
     return runCommand('ffmpeg', args, combinedFileName);
 }
+
 async function downloadMpd(mpdUrl, filename) {
     const filenameFormat = 'encrypted#' + filename + '.%(ext)s';
-    const args = ['--allow-u', '--downloader', 'aria2c', '-f', 'bv,ba', '-P', videoPath, '-o', filenameFormat, mpdUrl]
-    return runCommand('yt-dlp', args,filename);
+    const args = ['--allow-u', '--downloader', 'aria2c', '-f', 'bv,ba', '-P', videoPath, '-o', filenameFormat, mpdUrl];
+    return runCommand('yt-dlp', args, filename);
 }
 
 
