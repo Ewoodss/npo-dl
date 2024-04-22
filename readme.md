@@ -1,6 +1,5 @@
-# folder structure
-this folder is not the root of the project, the root of the project is the parent folder of this folder. the following is the folder structure of the project
-
+# Downloading from npo start
+this project makes it possible to download from npo start
 
 
 ## the following files should be downloaded and added to your path
