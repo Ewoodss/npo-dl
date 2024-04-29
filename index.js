@@ -1,14 +1,16 @@
-const puppeteer = require('puppeteer');
-const {XMLParser} = require('fast-xml-parser');
-const getWvKeys = require('./getwvkeys.js');
+import { launch } from 'puppeteer';
+import { XMLParser } from 'fast-xml-parser';
+import getWvKeys from './getwvkeys.js';
+import { existsSync, mkdirSync, readFileSync, writeFile, promises } from 'fs';
+import { unlink } from 'fs/promises';
+import { spawn } from 'child_process';
+import { resolve, join } from "path";
+
 const options = {
-    ignoreAttributes: false, removeNSPrefix: true
+    ignoreAttributes: false,
+    removeNSPrefix: true
 };
 const parser = new XMLParser(options);
-const fs = require('fs');
-const {unlink} = require('fs/promises');
-const {spawn} = require('child_process');
-const path = require("path");
 
 const WidevineProxyUrl = 'https://npo-drm-gateway.samgcloud.nepworldwide.nl/authentication';
 
@@ -16,11 +18,11 @@ const WidevineProxyUrl = 'https://npo-drm-gateway.samgcloud.nepworldwide.nl/auth
 const authKey = process.env.AUTH_KEY || "";
 const email = process.env.NPO_EMAIL || "";
 const password = process.env.NPO_PASSW || "";
-const videoPath = path.resolve("./videos") + "/";
+const videoPath = resolve("./videos") + "/";
 
-if (!fs.existsSync(videoPath)) {
-    fs.mkdirSync(videoPath);
-    fs.mkdirSync(videoPath + '/keys');
+if (!existsSync(videoPath)) {
+    mkdirSync(videoPath);
+    mkdirSync(videoPath + '/keys');
 }
 
 let browser = null;
@@ -29,11 +31,11 @@ let browser = null;
 //second parameter = season count (0 = all)
 //third parameter = reverse seasons (false = Start from latest, true = Start from first)
 
-getAllEpisodesFromShow("keuringsdienst-van-waarde", 2, true).then((urls) => {
-    getEpisodes(urls).then((result) => {
-        console.log(result);
-    });
-});
+// getAllEpisodesFromShow("keuringsdienst-van-waarde", 2, true).then((urls) => {
+//     getEpisodes(urls).then((result) => {
+//         console.log(result);
+//     });
+// });
 
 
 // enter the npo start show name and download all episodes from the chosen season.
@@ -52,14 +54,14 @@ if the video ids are sequential you can use the second parameter to download mul
 //     console.log(result);
 // });
 
-//getEpisode("https://npo.nl/start/serie/flikken-maastricht/seizoen-11/undercover_1/afspelen").then((result) => {
-//    console.log(result);
-//});
+getEpisode("https://npo.nl/start/serie/flikken-maastricht/seizoen-11/undercover_1/afspelen").then((result) => {
+   console.log(result);
+});
 
 async function npoLogin() {
     // check if browser is already running
     if (browser === null) {
-        browser = await puppeteer.launch({headless: false});
+        browser = await launch({headless: false});
     }
 
     console.log('Running tests..');
@@ -118,7 +120,7 @@ async function getEpisodesInOrder(firstId, episodeCount) {
 
 async function getAllEpisodesFromShow(show, seasonCount = 0, reverse = false) {
     if (browser == null) {
-        browser = await puppeteer.launch({headless: false});
+        browser = await launch({headless: false});
     }
     const page = await browser.newPage();
 
@@ -159,7 +161,7 @@ async function getAllEpisodesFromShow(show, seasonCount = 0, reverse = false) {
 
 async function getAllEpisodesFromSeason(show, season = 0, reverse = false) {
     if (browser == null) {
-        browser = await puppeteer.launch({headless: false});
+        browser = await launch({headless: false});
     }
     const page = await browser.newPage();
 
@@ -202,7 +204,6 @@ async function getEpisodes(urls) {
     await promiseLogin;
     for (const npo_url of urls) {
         informationList.push(getInformation(npo_url));
-        await sleep(7500);
     }
 
     const list = await Promise.all(informationList);
@@ -251,7 +252,7 @@ async function getInformation(url) {
             if (await fileExists(keyPath)) {
                 await page.close();
                 console.log('information already gathered');
-                return JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+                return JSON.parse(readFileSync(keyPath, 'utf8'));
             }
 
             const mpdPromise = page.waitForResponse((response) => {
@@ -305,7 +306,7 @@ async function getInformation(url) {
                 console.log('probably no drm');
             }
 
-            await writeFile(keyPath, JSON.stringify(information));
+            await writeKeyFile(keyPath, JSON.stringify(information));
 
             page.close();
             console.log(information);
@@ -323,11 +324,11 @@ async function getInformation(url) {
 }
 
 function getKeyPath(filename) {
-    return path.join(videoPath, '/keys/', filename + '.json');
+    return join(videoPath, '/keys/', filename + '.json');
 }
 
-async function writeFile(path, data) {
-    await fs.writeFile(path, data, 'utf8', (err) => {
+async function writeKeyFile(path, data) {
+    await writeFile(path, data, 'utf8', (err) => {
         if (err) {
             console.log(`Error writing file: ${err}`);
         } else {
@@ -418,14 +419,14 @@ async function decryptFiles(filename, key) {
 }
 
 async function runCommand(command, args, result) {
-    return new Promise((resolve, reject) => {
+    return new Promise((success, reject) => {
         const cmd = spawn(command, args);
         const stdout = cmd.stdout;
         let stdoutData = null;
 
         stdout.on('end', () => {
             console.log(`finished: ${command} ${args}`);
-            resolve(result);
+            success(result);
         });
 
         stdout.on('readable', () => {
@@ -459,13 +460,13 @@ async function downloadMpd(mpdUrl, filename) {
 function getWVKeys(pssh, x_custom_data) {
     console.log('getting keys from website');
 
-    return new Promise((resolve, reject) => {
+    return new Promise((success, reject) => {
         if (authKey === "") {
             reject('no auth key');
         }
         const js_getWVKeys = new getWvKeys(pssh, WidevineProxyUrl, authKey, x_custom_data);
         js_getWVKeys.getWvKeys().then((result) => {
-            resolve(result);
+            success(result);
         });
     });
 }
@@ -493,10 +494,10 @@ async function generateFileName(page) {
 }
 
 
-const fileExists = async path => !!(await fs.promises.stat(path).catch(() => false));
+const fileExists = async path => !!(await promises.stat(path).catch(() => false));
 
 const sleep = (milliseconds) => {
-    return new Promise(resolve => setTimeout(resolve, milliseconds));
+    return new Promise(success => setTimeout(success, milliseconds));
 };
 
 

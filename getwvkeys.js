@@ -1,4 +1,4 @@
-const axios = require('axios');
+import axios from 'axios';
 
 class getWvKeys {
     constructor(pssh, licenseUrl, authKey, x_custom_data, apiUrl = "https://getwvkeys.cc/pywidevine", buildInfo = "", force = false, verbose = false) {
@@ -119,7 +119,7 @@ class getWvKeys {
 
 }
 
-module.exports = getWvKeys;
+export default getWvKeys;
 
 function log(msg, error = false) {
     if (error) {

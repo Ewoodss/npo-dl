@@ -2,19 +2,21 @@
   "name": "automation",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=10.0.0"
+
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^0.26.1",
-    "express": "^4.18.2",
-    "fast-xml-parser": "^4.0.7",
-    "puppeteer": "^13.5.1",
-    "puppeteer-extra": "^3.2.3",
-    "puppeteer-extra-plugin-stealth": "^2.9.0",
-    "request-promise": "^0.0.1"
+    "axios": "1.6.8",
+    "fast-xml-parser": "^4.3.6",
+    "puppeteer": "^22.7.1"
   }
 }
