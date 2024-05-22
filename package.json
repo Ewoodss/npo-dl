@@ -15,7 +15,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "1.6.8",
+    "axios": "1.7.2",
     "fast-xml-parser": "^4.3.6",
     "puppeteer": "^22.7.1"
   }
