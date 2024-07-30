@@ -1,14 +1,13 @@
-import { launch } from 'puppeteer';
-import { XMLParser } from 'fast-xml-parser';
+import {launch} from 'puppeteer';
+import {XMLParser} from 'fast-xml-parser';
 import getWvKeys from './getwvkeys.js';
-import { existsSync, mkdirSync, readFileSync, writeFile, promises } from 'fs';
-import { unlink } from 'fs/promises';
-import { spawn } from 'child_process';
-import { resolve, join } from "path";
+import {existsSync, mkdirSync, readFileSync, writeFile, promises} from 'fs';
+import {unlink} from 'fs/promises';
+import {spawn} from 'child_process';
+import {resolve, join} from "path";
 
 const options = {
-    ignoreAttributes: false,
-    removeNSPrefix: true
+    ignoreAttributes: false, removeNSPrefix: true
 };
 const parser = new XMLParser(options);
 
@@ -31,7 +30,7 @@ let browser = null;
 //second parameter = season count (0 = all)
 //third parameter = reverse seasons (false = Start from latest, true = Start from first)
 
-// getAllEpisodesFromShow("keuringsdienst-van-waarde", 2, true).then((urls) => {
+// getAllEpisodesFromShow("https://npo.nl/start/serie/keuringsdienst-van-waarde").then((urls) => {
 //     getEpisodes(urls).then((result) => {
 //         console.log(result);
 //     });
@@ -54,8 +53,8 @@ if the video ids are sequential you can use the second parameter to download mul
 //     console.log(result);
 // });
 
-getEpisode("https://npo.nl/start/serie/flikken-maastricht/seizoen-11/undercover_1/afspelen").then((result) => {
-   console.log(result);
+getEpisode("https://npo.nl/start/serie/dertigers/seizoen-6_1/dertigers_203/afspelen").then((result) => {
+    console.log(result);
 });
 
 async function npoLogin() {
@@ -118,15 +117,14 @@ async function getEpisodesInOrder(firstId, episodeCount) {
     return getEpisodes(urls);
 }
 
-async function getAllEpisodesFromShow(show, seasonCount = 0, reverse = false) {
+async function getAllEpisodesFromShow(url, seasonCount = -1, reverse = false) {
     if (browser == null) {
         browser = await launch({headless: false});
     }
     const page = await browser.newPage();
 
-    const urls = [];
 
-    await page.goto(`https://npo.nl/start/serie/${show}`);
+    await page.goto(url);
 
     const jsonData = await page.evaluate(() => {
         return JSON.parse(document.getElementById('__NEXT_DATA__').innerText) || null;
@@ -139,27 +137,31 @@ async function getAllEpisodesFromShow(show, seasonCount = 0, reverse = false) {
 
     await page.close();
 
-    const seasons = reverse
-        ? jsonData['props']['pageProps']['dehydratedState']['queries'][1]['state']['data'].reverse()
-        : jsonData['props']['pageProps']['dehydratedState']['queries'][1]['state']['data'];
+    const show = jsonData['props']['pageProps']['dehydratedState']['queries'][0]['state']['data']['slug'];
+    const seasons = jsonData['props']['pageProps']['dehydratedState']['queries'][1]['state']['data'];
+    if (!reverse) // the normal season order is already reversed
+        seasons.reverse();
 
-    const seasonsLength = seasonCount !== 0 ? seasonCount : seasons.length;
-
+    const seasonsLength = seasonCount !== -1 ? seasonCount : seasons.length;
+    const urls = [];
+    const perSeasonEpisodes = [];
 
     for (let i = 0; i < seasonsLength; i++) {
-        let season = seasons[i]['slug'];
-        console.log(season);
-        let seasonUrls = await getAllEpisodesFromSeason(show, season, reverse);
-        for (let x = 0; x < seasonUrls.length; x++) {
-            console.log(seasonUrls[x]);
-            urls.push(seasonUrls[x]);
-        }
+        const seasonEpisodes = getAllEpisodesFromSeason(`https://npo.nl/start/serie/${show}/${seasons[i]['slug']}`, reverse);
+        perSeasonEpisodes.push(seasonEpisodes);
     }
+
+    await Promise.all(perSeasonEpisodes)
+        .then((result) => {
+            for (const season of result) {
+                urls.push(...season);
+            }
+        });
 
     return urls;
 }
 
-async function getAllEpisodesFromSeason(show, season = 0, reverse = false) {
+async function getAllEpisodesFromSeason(url, reverse = false) {
     if (browser == null) {
         browser = await launch({headless: false});
     }
@@ -167,9 +169,8 @@ async function getAllEpisodesFromSeason(show, season = 0, reverse = false) {
 
     const urls = [];
 
-    console.log(`${show} - ${season}`);
+    await page.goto(url);
 
-    await page.goto(`https://npo.nl/start/serie/${show}/${season}`);
     await page.waitForSelector('div[data-testid=\'btn-login\']');
     const jsonData = await page.evaluate(() => {
         return JSON.parse(document.getElementById('__NEXT_DATA__').innerText) || null;
@@ -180,9 +181,11 @@ async function getAllEpisodesFromSeason(show, season = 0, reverse = false) {
         return null;
     }
 
-    const episodes = reverse
-        ? jsonData['props']['pageProps']['dehydratedState']['queries'][2]['state']['data'].reverse()
-        : jsonData['props']['pageProps']['dehydratedState']['queries'][2]['state']['data'];
+    const show = jsonData['query']['seriesSlug'];
+    const season = jsonData['query']['seriesParams'][0];
+    const episodes = jsonData['props']['pageProps']['dehydratedState']['queries'][2]['state']['data'];
+    if (!reverse) // the normal is already reversed, so if we want to start from the first episode we need to reverse it
+        episodes.reverse();
 
     for (let x = 0; x < episodes.length; x++) {
         let programKey = episodes[x]['programKey'];
@@ -202,9 +205,15 @@ async function getEpisodes(urls) {
     const promiseLogin = npoLogin();
     let informationList = [];
     await promiseLogin;
+
+    let count = 0;
     for (const npo_url of urls) {
         informationList.push(getInformation(npo_url));
+        if (count % 10 === 0) {
+            await Promise.all(informationList);
+        }
     }
+
 
     const list = await Promise.all(informationList);
     await browser.close();
@@ -229,98 +238,86 @@ async function downloadMulti(InformationList, runParallel = false) {
 }
 
 async function getInformation(url) {
-    let tries = 0;
-    while (tries <= 3) {
-        tries++;
-        try {
-            const page = await browser.newPage();
+    const page = await browser.newPage();
 
-            await page.goto(url);
-            if (page.url() === "https://npo.nl/start") {
-                await page.close();
-                console.log(`Error wrong episode ID ${url}`);
-                return null;
-            }
+    await page.goto(url);
+    if (page.url() === "https://npo.nl/start") {
+        await page.close();
+        console.log(`Error wrong episode ID ${url}`);
+        return null;
+    }
 
-            // const iframe = await page.waitForSelector(`#iframe-${id}`);
-            await page.waitForSelector(`.bmpui-image`);
-            const filename = await generateFileName(page);
+    // const iframe = await page.waitForSelector(`#iframe-${id}`);
+    await page.waitForSelector(`.bmpui-image`);
+    const filename = await generateFileName(page);
 
-            console.log(`${filename} - ${url}`);
-            const keyPath = getKeyPath(filename);
+    console.log(`${filename} - ${url}`);
+    const keyPath = getKeyPath(filename);
 
-            if (await fileExists(keyPath)) {
-                await page.close();
-                console.log('information already gathered');
-                return JSON.parse(readFileSync(keyPath, 'utf8'));
-            }
+    if (await fileExists(keyPath)) {
+        await page.close();
+        console.log('information already gathered');
+        return JSON.parse(readFileSync(keyPath, 'utf8'));
+    }
 
-            const mpdPromise = page.waitForResponse((response) => {
-                if (response.url().endsWith('.mpd')) {
-                    return response;
-                }
-            });
+    const mpdPromise = page.waitForResponse((response) => {
+        if (response.url().endsWith('.mpd') && response.request().method().toUpperCase() != "OPTIONS") {
+            return response;
+        }
+    });
 
-            // wait for post request that ends with 'stream-link'
-            const streamResponsePromise = page.waitForResponse((response) => {
-                if (response.url().endsWith('stream-link') && response.request().method() === 'POST') {
-                    return response;
-                }
-            });
+    // wait for post request that ends with 'stream-link'
+    const streamResponsePromise = page.waitForResponse((response) => {
 
-            // reload the page to get the stream link
-            await page.reload();
-            const streamData = await (await streamResponsePromise).json();
+        if (response.url().endsWith('stream-link') && response.request().method().toUpperCase() != "OPTIONS") {
+            return response;
+        }
+    });
 
-            let x_custom_data = "";
-            try {
-                x_custom_data = streamData['stream']['drmToken'] || "";
-            } catch (TypeError) {
-                const pageContent = await page.content();
-                if (pageContent.includes("Alleen te zien met NPO Plus")) {
-                    console.log('Error content needs NPO Plus subscription');
-                    return null;
-                }
-            }
+    // reload the page to get the stream link
+    await page.reload();
+    page.waitForNetworkIdle();
+    const streamData = await (await streamResponsePromise).json();
 
-            const mpdData = parser.parse(await (await mpdPromise).text());
-
-            let pssh = "";
-            // check if the mpdData contains the necessary information
-            if ('ContentProtection' in mpdData["MPD"]["Period"]["AdaptationSet"][1]) {
-                pssh = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"][3].pssh || "";
-            }
-
-            const information = {
-                "filename": filename,
-                "pssh": pssh,
-                "x_custom_data": x_custom_data,
-                "mpdUrl": streamData['stream']['streamURL'],
-                "wideVineKeyResponse": null
-            };
-
-            //if pssh and x_custom_data are not empty, get the keys
-            if (pssh.length !== 0 && x_custom_data.length !== 0) {
-                information.wideVineKeyResponse = ((await getWVKeys(pssh, x_custom_data)).trim());
-            } else {
-                console.log('probably no drm');
-            }
-
-            await writeKeyFile(keyPath, JSON.stringify(information));
-
-            page.close();
-            console.log(information);
-            return information;
-        } catch (e) {
-            console.log(`Error retrieving information, try ${tries}/3 (${url})`);
-            console.log(e);
-            await sleep(5000);
-            try {
-                await page.close();
-            } catch (E) {
-            }
+    let x_custom_data = "";
+    try {
+        x_custom_data = streamData['stream']['drmToken'] || "";
+    } catch (TypeError) {
+        const pageContent = await page.content();
+        if (pageContent.includes("Alleen te zien met NPO Plus")) {
+            console.log('Error content needs NPO Plus subscription');
+            return null;
         }
     }
+
+    const mpdData = parser.parse(await (await mpdPromise).text());
+
+    let pssh = "";
+    // check if the mpdData contains the necessary information
+    if ('ContentProtection' in mpdData["MPD"]["Period"]["AdaptationSet"][1]) {
+        pssh = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"][3].pssh || "";
+    }
+
+    const information = {
+        "filename": filename,
+        "pssh": pssh,
+        "x_custom_data": x_custom_data,
+        "mpdUrl": streamData['stream']['streamURL'],
+        "wideVineKeyResponse": null
+    };
+
+    //if pssh and x_custom_data are not empty, get the keys
+    if (pssh.length !== 0 && x_custom_data.length !== 0) {
+        information.wideVineKeyResponse = ((await getWVKeys(pssh, x_custom_data)).trim());
+    } else {
+        console.log('probably no drm');
+    }
+
+    await writeKeyFile(keyPath, JSON.stringify(information));
+
+    page.close();
+    console.log(information);
+    return information;
 }
 
 function getKeyPath(filename) {
@@ -500,10 +497,4 @@ const sleep = (milliseconds) => {
     return new Promise(success => setTimeout(success, milliseconds));
 };
 
-
-
-
-
-
-
-
+export default {getInformation, getAllEpisodesFromShow, getAllEpisodesFromSeason};
