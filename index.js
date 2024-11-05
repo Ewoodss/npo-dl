@@ -79,8 +79,8 @@ async function npoLogin() {
     await page.waitForSelector('button[value=\'login\']');
     await page.click('button[value=\'login\']');
 
-    await page.waitForSelector('button[class=\'group w-full cursor-pointer\']');
-    await page.click('button[class=\'group w-full cursor-pointer\']');
+    await page.waitForSelector('button[class=\'bg-transparent group w-full cursor-pointer\']');
+    await page.click('button[class=\'bg-transparent group w-full cursor-pointer\']');
 
     try {
         await page.waitForNetworkIdle();
@@ -261,7 +261,7 @@ async function getInformation(url) {
     }
 
     const mpdPromise = page.waitForResponse((response) => {
-        if (response.url().endsWith('.mpd') && response.request().method().toUpperCase() != "OPTIONS") {
+        if (response.request().method().toUpperCase() != "OPTIONS" && response.url().endsWith('.mpd')) {
             return response;
         }
     });
@@ -269,7 +269,7 @@ async function getInformation(url) {
     // wait for post request that ends with 'stream-link'
     const streamResponsePromise = page.waitForResponse((response) => {
 
-        if (response.url().endsWith('stream-link') && response.request().method().toUpperCase() != "OPTIONS") {
+        if (response.request().method().toUpperCase() != "OPTIONS" && response.url().endsWith('stream-link')) {
             return response;
         }
     });
