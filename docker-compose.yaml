@@ -1,0 +1,10 @@
+version: "3.7"
+services:
+  web:
+    # image: npo-dl:latest
+    build: .
+    cap_add:
+      - SYS_ADMIN
+    env_file: .env
+    environment:
+      - URL=""
