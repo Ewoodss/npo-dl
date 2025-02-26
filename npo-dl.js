@@ -39,8 +39,6 @@ async function npoLogin() {
     if (browser === null) {
         browser = await launch({ headless: headless });
     }
-
-    console.log('Running tests..');
     const page = await browser.newPage();
 
     await page.goto('https://npo.nl/start');
