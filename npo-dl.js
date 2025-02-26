@@ -220,7 +220,6 @@ async function waitResponseSuffix(page, suffix) {
         }
         const url = response.url();
         if (!url.endsWith(suffix)) {
-            console.log(`ignoring request: ${url} method: ${method}`);
             return false;
         }
 
