@@ -14,7 +14,7 @@ class getWvKeys {
             "force": this.force,
             "license_url": this.licenseUrl
         };
-        this.headers = {"X-API-Key": this.authKey, "Content-Type": "application/json"};
+        this.headers = { "X-API-Key": this.authKey, "Content-Type": "application/json" };
         this.headers["x-custom-data"] = x_custom_data;
         this.verbose = verbose;
     }
@@ -37,7 +37,7 @@ class getWvKeys {
             log("headers: " + JSON.stringify(responseHeaders));
 
         if ("x-cache" in responseHeaders) {
-            return {"cache": true, "keys": licenseData["keys"]};
+            return { "cache": true, "keys": licenseData["keys"] };
         }
 
         this.data["session_id"] = licenseData["session_id"];
@@ -51,7 +51,7 @@ class getWvKeys {
         //turn challenge into byte array it's encoded in base64
         challenge = Buffer.from(challenge, 'base64');
 
-        return {"cache": false, "challenge": challenge};
+        return { "cache": false, "challenge": challenge };
     }
 
     async post_request(challenge) {
@@ -81,7 +81,7 @@ class getWvKeys {
 
     async decrypter(license_response) {
         this.data["response"] = license_response;
-        const header = {"X-API-Key": this.authKey, "Content-Type": "application/json"};
+        const header = { "X-API-Key": this.authKey, "Content-Type": "application/json" };
 
         let config = {
             method: 'post',

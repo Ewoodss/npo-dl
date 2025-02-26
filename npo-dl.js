@@ -1,10 +1,12 @@
-import {launch} from 'puppeteer';
-import {XMLParser} from 'fast-xml-parser';
+import { launch } from 'puppeteer';
+import { XMLParser } from 'fast-xml-parser';
 import getWvKeys from './getwvkeys.js';
-import {existsSync, mkdirSync, readFileSync, writeFile, promises} from 'fs';
-import {unlink} from 'fs/promises';
-import {spawn} from 'child_process';
-import {resolve, join} from "path";
+import { existsSync, mkdirSync, readFileSync, writeFile, promises } from 'fs';
+import { unlink } from 'fs/promises';
+import { spawn } from 'child_process';
+import { resolve, join } from "path";
+import { parseBoolean } from './utils.js';
+
 
 const options = {
     ignoreAttributes: false, removeNSPrefix: true
@@ -17,7 +19,12 @@ const WidevineProxyUrl = 'https://npo-drm-gateway.samgcloud.nepworldwide.nl/auth
 const authKey = process.env.AUTH_KEY || "";
 const email = process.env.NPO_EMAIL || "";
 const password = process.env.NPO_PASSW || "";
+const headless = parseBoolean(process.env.HEADLESS);
+
+console.log("Headless: " + headless);
+
 const videoPath = resolve("./videos") + "/";
+
 
 if (!existsSync(videoPath)) {
     mkdirSync(videoPath);
@@ -26,41 +33,11 @@ if (!existsSync(videoPath)) {
 
 let browser = null;
 
-//enter the npo start show name and download all episodes from all seasons.
-//second parameter = season count (0 = all)
-//third parameter = reverse seasons (false = Start from latest, true = Start from first)
-
-// getAllEpisodesFromShow("https://npo.nl/start/serie/keuringsdienst-van-waarde").then((urls) => {
-//     getEpisodes(urls).then((result) => {
-//         console.log(result);
-//     });
-// });
-
-
-// enter the npo start show name and download all episodes from the chosen season.
-/*
-getAllEpisodesFromSeason("keuringsdienst-van-waarde", "seizoen-3").then((urls) => {
-    getEpisodes(urls);
-});
-*/
-
-/*
-enter the video id here, you can find it in the url of the video, full url should look like this: https://www.npostart.nl/AT_300003151
-if the video ids are sequential you can use the second parameter to download multiple episodes
-*/
-
-// getEpisodesInOrder("AT_300003161", 1).then((result) => {
-//     console.log(result);
-// });
-
-getEpisode("https://npo.nl/start/serie/dertigers/seizoen-6_1/dertigers_203/afspelen").then((result) => {
-    console.log(result);
-});
 
 async function npoLogin() {
     // check if browser is already running
     if (browser === null) {
-        browser = await launch({headless: false});
+        browser = await launch({ headless: headless });
     }
 
     console.log('Running tests..');
@@ -82,14 +59,10 @@ async function npoLogin() {
     await page.waitForSelector('button[class=\'bg-transparent group w-full cursor-pointer\']');
     await page.click('button[class=\'bg-transparent group w-full cursor-pointer\']');
 
-    try {
-        await page.waitForNetworkIdle();
-    } catch (TimeoutError) {
-        // keep going
-    }
+    await waitResponseSuffix(page, 'session')
 
     await page.close();
-
+    console.log('Login successful');
 }
 
 async function getEpisode(url) {
@@ -119,7 +92,7 @@ async function getEpisodesInOrder(firstId, episodeCount) {
 
 async function getAllEpisodesFromShow(url, seasonCount = -1, reverse = false) {
     if (browser == null) {
-        browser = await launch({headless: false});
+        browser = await launch({ headless: headless });
     }
     const page = await browser.newPage();
 
@@ -163,7 +136,7 @@ async function getAllEpisodesFromShow(url, seasonCount = -1, reverse = false) {
 
 async function getAllEpisodesFromSeason(url, reverse = false) {
     if (browser == null) {
-        browser = await launch({headless: false});
+        browser = await launch({ headless: false });
     }
     const page = await browser.newPage();
 
@@ -237,6 +210,28 @@ async function downloadMulti(InformationList, runParallel = false) {
     return result;
 }
 
+async function waitResponseSuffix(page, suffix) {
+    return page.waitForResponse(async (response) => {
+        const request = response.request()
+        const method = request.method().toUpperCase()
+
+        if (method != "GET" && method != "POST") {
+            return false;
+        }
+        const url = response.url();
+        if (!url.endsWith(suffix)) {
+            console.log(`ignoring request: ${url} method: ${method}`);
+            return false;
+        }
+
+        console.log(`request: ${url} method: ${method}`);
+
+
+
+        return url.endsWith(suffix)
+    });
+}
+
 async function getInformation(url) {
     const page = await browser.newPage();
 
@@ -259,20 +254,10 @@ async function getInformation(url) {
         console.log('information already gathered');
         return JSON.parse(readFileSync(keyPath, 'utf8'));
     }
+    console.log('gathering information');
 
-    const mpdPromise = page.waitForResponse((response) => {
-        if (response.request().method().toUpperCase() != "OPTIONS" && response.url().endsWith('.mpd')) {
-            return response;
-        }
-    });
-
-    // wait for post request that ends with 'stream-link'
-    const streamResponsePromise = page.waitForResponse((response) => {
-
-        if (response.request().method().toUpperCase() != "OPTIONS" && response.url().endsWith('stream-link')) {
-            return response;
-        }
-    });
+    const mpdPromise = waitResponseSuffix(page, 'mpd');
+    const streamResponsePromise = waitResponseSuffix(page, 'stream-link');
 
     // reload the page to get the stream link
     await page.reload();
@@ -313,10 +298,11 @@ async function getInformation(url) {
         console.log('probably no drm');
     }
 
-    await writeKeyFile(keyPath, JSON.stringify(information));
+    writeKeyFile(keyPath, JSON.stringify(information));
 
+    page.goto('https://www.npo.nl/');
+    await page.waitForNetworkIdle();
     page.close();
-    console.log(information);
     return information;
 }
 
@@ -324,8 +310,8 @@ function getKeyPath(filename) {
     return join(videoPath, '/keys/', filename + '.json');
 }
 
-async function writeKeyFile(path, data) {
-    await writeFile(path, data, 'utf8', (err) => {
+function writeKeyFile(path, data) {
+    writeFile(path, data, 'utf8', (err) => {
         if (err) {
             console.log(`Error writing file: ${err}`);
         } else {
@@ -333,7 +319,6 @@ async function writeKeyFile(path, data) {
         }
 
     });
-
 }
 
 async function deleteFile(path) {
@@ -497,4 +482,4 @@ const sleep = (milliseconds) => {
     return new Promise(success => setTimeout(success, milliseconds));
 };
 
-export default {getInformation, getAllEpisodesFromShow, getAllEpisodesFromSeason};
+export { getEpisode }
