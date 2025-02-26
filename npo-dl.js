@@ -1,10 +1,10 @@
 import { launch } from 'puppeteer';
 import { XMLParser } from 'fast-xml-parser';
 import getWvKeys from './getwvkeys.js';
-import { existsSync, mkdirSync, readFileSync, writeFile, promises } from 'fs';
-import { unlink } from 'fs/promises';
-import { spawn } from 'child_process';
-import { resolve, join } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFile, promises } from 'node:fs';
+import { unlink } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { resolve, join } from "node:path";
 import { parseBoolean } from './utils.js';
 
 
