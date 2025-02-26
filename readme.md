@@ -33,16 +33,16 @@ brew install ffmpeg
 brew install yt-dlp
 ```
 
-### make sure too run the following commands in the root of the project
+### installing dependencies
+make sure too run the following commands in the root of the project
 
 ```bash
-cd npo-dl
 npm install
 ```
 
 ## the following environment variables are required
 
-- AUTH_KEY: this is a key from the website [getwvkeys](https://getwvkeys.cc)
+- AUTH_KEY: this is a api key from the website [getwvkeys](https://getwvkeys.cc)
   this is used for decrypting the video stream
 - NPO_EMAIL: this is the email address used to login to the npo website
 - NPO_PASSW: this is the password used to login to the npo website
