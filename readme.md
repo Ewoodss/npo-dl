@@ -30,6 +30,7 @@ brew install yt-dlp
 ```bash
 cd npo-dl
 npm install
+```
 
 ## the following environment variables are required
 - AUTH_KEY: this is a key from the website [getwvkeys](https://getwvkeys.cc) this is used for decrypting the video stream
@@ -37,4 +38,6 @@ npm install
 - NPO_PASSW: this is the password used to login to the npo website
 
 ## running the project
+```bash
 node cli.js download <url>
+```
