@@ -1,18 +1,10 @@
-import { launch } from "puppeteer";
+import { HTTPResponse, launch, Page } from "puppeteer";
 import { XMLParser } from "fast-xml-parser";
 import getWvKeys from "./getwvkeys.js";
-import {
-  existsSync,
-  mkdirSync,
-  promises,
-  readFileSync,
-  writeFile,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFile } from "node:fs";
 import { unlink } from "node:fs/promises";
-import { spawn } from "node:child_process";
-import { join, resolve } from "node:path";
-import { parseBoolean } from "./utils.js";
 import process from "node:process";
+import { fileExists, getKeyPath, getVideoPath, parseBoolean } from "./utils.js";
 
 const options = {
   ignoreAttributes: false,
@@ -29,22 +21,16 @@ const email = process.env.NPO_EMAIL || "";
 const password = process.env.NPO_PASSW || "";
 const headless = parseBoolean(process.env.HEADLESS);
 
-console.log("Headless: " + headless);
-
-const videoPath = resolve("./videos") + "/";
+const videoPath = getVideoPath();
 
 if (!existsSync(videoPath)) {
   mkdirSync(videoPath);
   mkdirSync(videoPath + "/keys");
 }
 
-let browser = null;
+const browser = await launch({ headless: headless });
 
 async function npoLogin() {
-  // check if browser is already running
-  if (browser === null) {
-    browser = await launch({ headless: headless });
-  }
   const page = await browser.newPage();
 
   await page.goto("https://npo.nl/start");
@@ -78,10 +64,10 @@ async function getEpisode(url) {
   await promiseLogin;
   const result = await getInformation(url);
   await browser.close();
-  return downloadFromID(result);
+  return result;
 }
 
-async function getEpisodesInOrder(firstId, episodeCount) {
+function getEpisodesInOrder(firstId, episodeCount) {
   const index = firstId.lastIndexOf("_") + 1;
 
   const id = firstId.substring(index, firstId.length);
@@ -99,9 +85,6 @@ async function getEpisodesInOrder(firstId, episodeCount) {
 }
 
 async function getAllEpisodesFromShow(url, seasonCount = -1, reverse = false) {
-  if (browser == null) {
-    browser = await launch({ headless: headless });
-  }
   const page = await browser.newPage();
 
   await page.goto(url);
@@ -153,9 +136,6 @@ async function getAllEpisodesFromShow(url, seasonCount = -1, reverse = false) {
 }
 
 async function getAllEpisodesFromSeason(url, reverse = false) {
-  if (browser == null) {
-    browser = await launch({ headless: false });
-  }
   const page = await browser.newPage();
 
   const urls = [];
@@ -231,8 +211,13 @@ async function downloadMulti(InformationList, runParallel = false) {
   return result;
 }
 
+/**
+ * @param {Page} page
+ * @param {str} suffix
+ * @returns {Promise<HTTPResponse>}
+ */
 async function waitResponseSuffix(page, suffix) {
-  return page.waitForResponse(async (response) => {
+  const response = page.waitForResponse(async (response) => {
     const request = response.request();
     const method = request.method().toUpperCase();
 
@@ -245,9 +230,16 @@ async function waitResponseSuffix(page, suffix) {
     }
 
     console.log(`request: ${url} method: ${method}`);
+    try {
+      const body = await response.buffer();
+    } catch (error) {
+      console.error("preflicht error");
+      return false;
+    }
 
     return url.endsWith(suffix);
   });
+  return await response;
 }
 
 async function getInformation(url) {
@@ -279,8 +271,9 @@ async function getInformation(url) {
 
   // reload the page to get the stream link
   await page.reload();
-  page.waitForNetworkIdle();
-  const streamData = await (await streamResponsePromise).json();
+
+  const streamResponse = await streamResponsePromise;
+  const streamData = await streamResponse.json();
 
   let x_custom_data = "";
   try {
@@ -292,8 +285,9 @@ async function getInformation(url) {
       return null;
     }
   }
-
-  const mpdData = parser.parse(await (await mpdPromise).text());
+  const mpdResponse = await mpdPromise;
+  const mpdText = await mpdResponse.text();
+  const mpdData = parser.parse(mpdText);
 
   let pssh = "";
   // check if the mpdData contains the necessary information
@@ -312,22 +306,20 @@ async function getInformation(url) {
 
   //if pssh and x_custom_data are not empty, get the keys
   if (pssh.length !== 0 && x_custom_data.length !== 0) {
-    information.wideVineKeyResponse = (await getWVKeys(pssh, x_custom_data))
-      .trim();
+    const WVKey = await getWVKeys(pssh, x_custom_data);
+    information.wideVineKeyResponse = WVKey.trim();
   } else {
     console.log("probably no drm");
   }
 
   writeKeyFile(keyPath, JSON.stringify(information));
 
-  page.goto("https://www.npo.nl/");
-  await page.waitForNetworkIdle();
-  page.close();
+  try {
+    await page.close();
+  } catch (error) {
+    console.error(error);
+  }
   return information;
-}
-
-function getKeyPath(filename) {
-  return join(videoPath, "/keys/", filename + ".json");
 }
 
 function writeKeyFile(path, data) {
@@ -340,151 +332,9 @@ function writeKeyFile(path, data) {
   });
 }
 
-async function deleteFile(path) {
-  // check if file exists
-  if (await fileExists(path)) {
-    try {
-      await unlink(path.toString());
-      console.log(`successfully deleted ${path}`);
-    } catch (error) {
-      console.error("there was an error:", error.message);
-    }
-  } else {
-    console.warn(`file ${path} does not exist`);
-  }
-}
-
-async function downloadFromID(information) {
-  if (information === null) {
-    return null;
-  }
-
-  let filename = information.filename.toString();
-
-  console.log(filename);
-
-  const combinedFileName = videoPath + filename + ".mkv";
-  if (await fileExists(combinedFileName)) {
-    console.log("File already downloaded");
-    return combinedFileName;
-  }
-
-  console.log(information);
-
-  filename = await downloadMpd(information.mpdUrl.toString(), filename);
-
-  console.log(filename);
-
-  let key = null;
-
-  if (information.wideVineKeyResponse !== null) {
-    key = information.wideVineKeyResponse.toString();
-  }
-
-  return await decryptFiles(filename, key);
-}
-
-async function decryptFiles(filename, key) {
-  //console.log(videoPath);
-  let encryptedFilename = "encrypted#" + filename;
-
-  const mp4File = videoPath + encryptedFilename + ".mp4";
-  const m4aFile = videoPath + encryptedFilename + ".m4a";
-
-  //if key is none then file probably not encrypted
-  let [mp4DecryptedFile, m4aDecryptedFile] = [mp4File, m4aFile];
-
-  // if (key != null) {
-  //     const mp4Decrypted = mp4Decrypt(mp4File, key);
-  //     const m4aDecrypted = mp4Decrypt(m4aFile, key);
-  //     [mp4DecryptedFile, m4aDecryptedFile] = await Promise.all([mp4Decrypted, m4aDecrypted]);
-  // }
-  if (key != null) {
-    key = key.split(":")[1];
-  }
-  const resultFileName = await combineVideoAndAudio(
-    filename,
-    mp4DecryptedFile,
-    m4aDecryptedFile,
-    key,
-  );
-
-  await sleep(1000);
-
-  if (await fileExists(resultFileName)) {
-    await deleteFile(mp4File);
-    await deleteFile(m4aFile);
-    await deleteFile(mp4DecryptedFile);
-    await deleteFile(m4aDecryptedFile);
-  }
-
-  return resultFileName;
-}
-
-async function runCommand(command, args, result) {
-  return new Promise((success, reject) => {
-    const cmd = spawn(command, args);
-    const stdout = cmd.stdout;
-    let stdoutData = null;
-
-    stdout.on("end", () => {
-      console.log(`finished: ${command} ${args}`);
-      success(result);
-    });
-
-    stdout.on("readable", () => {
-      stdoutData = stdout.read();
-      if (stdoutData != null) console.log(stdoutData + `\t [${result}]`);
-    });
-
-    cmd.stderr.on("error", (data) => {
-      reject(data);
-    });
-  });
-}
-
-async function combineVideoAndAudio(filename, video, audio, key) {
-  const combinedFileName = videoPath + filename + ".mkv";
-  let args = ["-i", video, "-i", audio, "-c", "copy", combinedFileName];
-  if (key != null) {
-    args = [
-      "-decryption_key",
-      key,
-      "-i",
-      video,
-      "-decryption_key",
-      key,
-      "-i",
-      audio,
-      "-c",
-      "copy",
-      combinedFileName,
-    ];
-  }
-  return runCommand("ffmpeg", args, combinedFileName);
-}
-
-async function downloadMpd(mpdUrl, filename) {
-  const filenameFormat = "encrypted#" + filename + ".%(ext)s";
-  const args = [
-    "--allow-u",
-    "--downloader",
-    "aria2c",
-    "-f",
-    "bv,ba",
-    "-P",
-    videoPath,
-    "-o",
-    filenameFormat,
-    mpdUrl,
-  ];
-  return runCommand("yt-dlp", args, filename);
-}
-
-function getWVKeys(pssh, x_custom_data) {
+async function getWVKeys(pssh, x_custom_data) {
   console.log("getting keys from website");
-
-  return new Promise((success, reject) => {
+  const promise = new Promise((success, reject) => {
     if (authKey === "") {
       reject("no auth key");
     }
@@ -498,6 +348,7 @@ function getWVKeys(pssh, x_custom_data) {
       success(result);
     });
   });
+  return await promise;
 }
 
 async function generateFileName(page) {
@@ -537,11 +388,8 @@ async function generateFileName(page) {
   return filename;
 }
 
-const fileExists = async (path) =>
-  !!(await promises.stat(path).catch(() => false));
-
 const sleep = (milliseconds) => {
   return new Promise((success) => setTimeout(success, milliseconds));
 };
 
-export { getEpisode };
+export { getEpisode, getInformation, npoLogin };

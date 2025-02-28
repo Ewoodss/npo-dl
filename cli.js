@@ -1,6 +1,7 @@
 // import from npo-dl.js
 import { getEpisode } from "./npo-dl.js";
 import { Command } from "commander";
+import { downloadFromID } from "./download.js";
 import process from "node:process";
 
 //enter the npo start show name and download all episodes from all seasons.
@@ -41,13 +42,17 @@ program
   .description("CLI to download npo start episodes")
   .version("1.0.0");
 
+async function download(url) {
+  const information = await getEpisode(url);
+  const result = await downloadFromID(information);
+  console.log(result);
+}
+
 program.command("download")
   .description("download a single episode")
   .argument("<url>", "url of the episode")
-  .action((url) => {
-    getEpisode(url).then((result) => {
-      console.log(result);
-    });
+  .action(async (url) => {
+    await download(url);
   });
 
 await program.parseAsync(process.argv);
