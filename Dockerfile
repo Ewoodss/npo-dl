@@ -12,4 +12,4 @@ COPY index.js ./
 
 ENV URL="provide a url using the -e flag or the .env file"
 
-ENTRYPOINT [ "node", "cli.js", "$URL" ]
+ENTRYPOINT [ "node", "api.js", "$URL" ]
