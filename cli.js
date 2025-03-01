@@ -8,6 +8,8 @@ import axios from "axios";
 // simple cli
 const program = new Command();
 
+const api_url = process.env.API_URL || "http://localhost:8080/";
+
 program
   .name("npo-start-downloader")
   .description("CLI to download npo start episodes")
@@ -15,7 +17,7 @@ program
 
 async function download(url) {
   const information_request = await axios.get(
-    "http://localhost:8080/getEpisode?url=" + url,
+     api_url + "getEpisode?url=" + url,
   );
   const information = information_request.data;
   const result = await downloadFromID(information);

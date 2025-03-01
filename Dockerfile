@@ -7,9 +7,6 @@ USER pptruser
 COPY package.json ./
 RUN npm install
 
-COPY getwvkeys.js ./
-COPY index.js ./
+COPY *.js ./
 
-ENV URL="provide a url using the -e flag or the .env file"
-
-ENTRYPOINT [ "node", "api.js", "$URL" ]
+ENTRYPOINT [ "node", "api.js"]

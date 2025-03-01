@@ -2,9 +2,11 @@ version: "3.7"
 services:
   web:
     # image: npo-dl:latest
+    container_name: npo_dl_api
+    restart: always
     build: .
     cap_add:
       - SYS_ADMIN
     env_file: .env
-    environment:
-      - URL=""
+    ports:
+      - 7080:8080
