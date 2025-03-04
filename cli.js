@@ -5,7 +5,6 @@ import process from "node:process";
 import axios from "axios";
 
 // simple cli
-// simple cli
 const program = new Command();
 
 const api_url = process.env.API_URL || "http://localhost:8080/";
@@ -17,9 +16,12 @@ program
 
 async function download(url) {
   const information_request = await axios.get(
-     api_url + "getEpisode?url=" + url,
+    api_url + "getEpisode?url=" + url,
   );
   const information = information_request.data;
+  // await npoLogin();
+  // const information = await getInformation(url);
+
   const result = await downloadFromID(information);
   console.log(result);
 }
@@ -62,3 +64,6 @@ if the video ids are sequential you can use the second parameter to download mul
 // getEpisode("https://npo.nl/start/serie/blauw/seizoen-1/blauw_9/afspelen").then((result) => {
 //     console.log(result);
 // });
+
+// example of a mislabeld season "https://npo.nl/start/serie/oogappels/seizoen-8/goudappels/afspelen"
+// example of a premium episode  "https://npo.nl/start/serie/flikken-maastricht/seizoen-18/flikken-maastricht_171/afspelen" 

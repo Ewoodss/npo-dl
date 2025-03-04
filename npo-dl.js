@@ -252,8 +252,20 @@ async function getInformation(url) {
     return null;
   }
 
-  // const iframe = await page.waitForSelector(`#iframe-${id}`);
-  await page.waitForSelector(`.bmpui-image`);
+  const canDownload = await new Promise((resolve) => {
+    page.waitForSelector(`.bmpui-image`, { timeout: 5000 })
+      .then(() => resolve(true))
+      .catch(() => resolve(false));
+    page.waitForSelector(".bg-gradient-video-overlay", { timeout: 5000 })
+      .then(() => resolve(false))
+      .catch(() => resolve(true));
+  });
+
+  if (!canDownload)
+  {
+    return null;
+  }
+
   const filename = await generateFileName(page);
 
   console.log(`${filename} - ${url}`);
@@ -373,7 +385,15 @@ async function generateFileName(page) {
 
   filename += (await rawSerie) + " - ";
   // remove word "Seizoen" from rawSeason
-  const seasonNumber = parseInt((await rawSeason).replace("Seizoen ", ""));
+  let seasonNumber = parseInt((await rawSeason).replace("Seizoen ", ""));
+  // if nan try different method
+  if (isNaN(seasonNumber)) {
+    const pageUrl = await page.url();
+    // get index of word 'seizoen' in pageUrl
+    const season_index = pageUrl.indexOf("seizoen-");
+    seasonNumber = parseInt(pageUrl.slice(season_index + 8).split("/")[0]);
+  }
+
   const episodeNumber = parseInt(
     (await rawNumber).replace("Afl. ", "").split("•")[0],
   );
