@@ -1,6 +1,7 @@
 // import from npo-dl.js
 import { downloadFromID } from "./download.js";
 import { Command } from "commander";
+import {getInformation} from "./npo-dl.js"
 import process from "node:process";
 import axios from "axios";
 
@@ -15,12 +16,8 @@ program
   .version("1.0.0");
 
 async function download(url) {
-  const information_request = await axios.get(
-    api_url + "getEpisode?url=" + url,
-  );
-  const information = information_request.data;
-  // await npoLogin();
-  // const information = await getInformation(url);
+  await npoLogin();
+  const information = await getInformation(url);
 
   const result = await downloadFromID(information);
   console.log(result);
