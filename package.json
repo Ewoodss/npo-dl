@@ -17,6 +17,6 @@
     "axios": "^1.8.1",
     "commander": "^13.1.0",
     "fast-xml-parser": "^5.0.8",
-    "puppeteer": "^24.3.0"
+    "puppeteer-core": "^24.3.0"
   }
 }

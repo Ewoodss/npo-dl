@@ -12,10 +12,14 @@ other versions might work but are not tested
 
 ## Setting up the environment
 
+### Chrome Browser
+
+Install the latest version of chrome browser for your operating system.
+
 ### for windows users
 
 ```powershell
-winget install ffmpeg
+winget install Gyan.FFmpeg
 winget install yt-dlp
 ```
 
