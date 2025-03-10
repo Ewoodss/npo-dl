@@ -1,8 +1,7 @@
-import { HTTPResponse, launch, Page } from "puppeteer";
+import { HTTPResponse, launch, Page } from "puppeteer-core";
 import { XMLParser } from "fast-xml-parser";
 import getWvKeys from "./getwvkeys.js";
 import { existsSync, mkdirSync, readFileSync, writeFile } from "node:fs";
-import { unlink } from "node:fs/promises";
 import process from "node:process";
 import { fileExists, getKeyPath, getVideoPath, parseBoolean } from "./utils.js";
 
@@ -16,7 +15,7 @@ const WidevineProxyUrl =
   "https://npo-drm-gateway.samgcloud.nepworldwide.nl/authentication";
 
 //set as environment variable or replace with your own key
-const authKey = process.env.AUTH_KEY || "";
+const authKey = process.env.GETWVKEYS_API_KEY || "";
 const email = process.env.NPO_EMAIL || "";
 const password = process.env.NPO_PASSW || "";
 const headless = parseBoolean(process.env.HEADLESS);
@@ -28,7 +27,7 @@ if (!existsSync(videoPath)) {
   mkdirSync(videoPath + "/keys");
 }
 
-const browser = await launch({ headless: headless });
+const browser = await launch({ headless: headless, channel: "chrome" });
 
 async function npoLogin() {
   const page = await browser.newPage();

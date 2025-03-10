@@ -34,6 +34,7 @@ brew install yt-dlp
 ```
 
 ### installing dependencies
+
 make sure too run the following commands in the root of the project
 
 ```bash
@@ -42,8 +43,8 @@ npm install
 
 ## the following environment variables are required
 
-- AUTH_KEY: this is a api key from the website [getwvkeys](https://getwvkeys.cc)
-  this is used for decrypting the video stream
+- GETWVKEYS_API_KEY: this is a api key from the website
+  [getwvkeys](https://getwvkeys.cc) this is used for decrypting the video stream
 - NPO_EMAIL: this is the email address used to login to the npo website
 - NPO_PASSW: this is the password used to login to the npo website
 
