@@ -1,0 +1,33 @@
+# github action too build and compile deno project, and upload the binary to release
+name: Build and Compile Deno Project
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    strategy:
+        matrix:
+          target:    ['x86_64-pc-windows-msvc', 'x86_64-apple-darwin', 'aarch64-apple-darwin', 'x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu']
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Setup deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.2.3
+      - name: Install dependencies
+        run: deno install --entrypoint cli.js
+      - name: Compile Deno
+        run: deno compile -A --target ${{ matrix.target }} --output npo-dl-cli-${{ matrix.target }} cli.js
+
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npo-dl-cli-${{ matrix.target }}
+          path: npo-dl-cli-${{ matrix.target }}*
+          if-no-files-found: error
+        
