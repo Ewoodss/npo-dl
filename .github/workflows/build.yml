@@ -1,6 +1,10 @@
 # github action too build and compile deno project, and upload the binary to release
 name: Build and Compile Deno Project
 
+permissions:
+  id-token: write
+  attestations: write
+
 on:
   push:
     branches:
@@ -23,11 +27,20 @@ jobs:
         run: deno install --entrypoint cli.js
       - name: Compile Deno
         run: deno compile -A --target ${{ matrix.target }} --output npo-dl-cli-${{ matrix.target }} cli.js
-
       - name: Upload binary as artifact
+        id: upload-binary
         uses: actions/upload-artifact@v4
         with:
           name: npo-dl-cli-${{ matrix.target }}
           path: npo-dl-cli-${{ matrix.target }}*
           if-no-files-found: error
+      - name: Attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: npo-dl-cli-${{ matrix.target }}
+          subject-digest: sha256:${{ steps.upload-binary.outputs.artifact-digest }}
+
+
+
+
         
