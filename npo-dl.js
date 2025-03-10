@@ -20,6 +20,14 @@ const email = process.env.NPO_EMAIL || "";
 const password = process.env.NPO_PASSW || "";
 const headless = parseBoolean(process.env.HEADLESS);
 
+// check that all required environment variables are set one by one
+if (!authKey) {
+  console.error(
+    "GETWVKEYS_API_KEY is not set, enter key from https://getwvkeys.cc/me",
+  );
+  process.exit(1);
+}
+
 const videoPath = getVideoPath();
 
 if (!existsSync(videoPath)) {
@@ -33,6 +41,18 @@ async function npoLogin() {
   const page = await browser.newPage();
 
   await page.goto("https://npo.nl/start");
+
+  // check that email and password are set
+  if (!email) {
+    console.warn("NPO_EMAIL is not set");
+    page.close();
+    return;
+  }
+  if (!password) {
+    console.warn("NPO_PASSW is not set");
+    page.close();
+    return;
+  }
 
   await page.waitForSelector("div[data-testid='btn-login']");
   await page.click("div[data-testid='btn-login']");
