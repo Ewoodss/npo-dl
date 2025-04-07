@@ -1,15 +1,13 @@
-FROM ghcr.io/puppeteer/puppeteer:latest
+FROM denoland/deno:latest
 
-USER root
 RUN apt-get update && apt-get install -y ffmpeg yt-dlp
 
-USER pptruser
+WORKDIR /app
 COPY package.json ./
-RUN npm install
+COPY deno.lock ./
+COPY *.js ./
+RUN deno install
 
-COPY getwvkeys.js ./
-COPY index.js ./
+RUN deno compile -A cli.js
 
-ENV URL="provide a url using the -e flag or the .env file"
-
-ENTRYPOINT [ "node", "cli.js", "$URL" ]
+CMD ["./npo-dl"]
