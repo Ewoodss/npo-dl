@@ -1,11 +1,11 @@
 {
   "name": "automation",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "",
   "type": "module",
-  "main": "index.js",
+  "main": "cli.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "deno compile -A cli.js"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -14,9 +14,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.8.1",
+    "axios": "^1.8.4",
     "commander": "^13.1.0",
-    "fast-xml-parser": "^5.0.8",
-    "puppeteer-core": "^24.3.0"
+    "fast-xml-parser": "^5.2.0"
   }
 }

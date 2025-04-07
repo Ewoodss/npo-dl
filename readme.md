@@ -49,6 +49,9 @@ npm install
 
 - GETWVKEYS_API_KEY: this is a api key from the website
   [getwvkeys](https://getwvkeys.cc) this is used for decrypting the video stream
+
+### Currently only downloading public/free episodes is supported, this is for future use
+
 - NPO_EMAIL: this is the email address used to login to the npo website
 - NPO_PASSW: this is the password used to login to the npo website
 
