@@ -7,6 +7,7 @@ import {
 } from "./utils.js";
 
 const videoPath = getVideoPath();
+import os from "node:os";
 
 async function downloadFromID(information) {
     if (information === null) {
@@ -40,8 +41,11 @@ async function downloadFromID(information) {
 
 async function downloadMpd(mpdUrl, filename) {
     const filenameFormat = "encrypted#" + filename + ".%(ext)s";
+    const coreCount = os.cpus().length;
     const args = [
         "--allow-u",
+        "--concurrent-fragments",
+        coreCount,
         "--downloader",
         "aria2c",
         "-f",
