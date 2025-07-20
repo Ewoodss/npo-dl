@@ -1,5 +1,5 @@
 // import from npo-dl.js
-import { getEpisode } from "./npo-dl.js";
+import { getEpisodesData, getInformation } from "./npo-dl.js";
 import { Command } from "commander";
 import { downloadFromID } from "./download.js";
 import process from "node:process";
@@ -40,11 +40,23 @@ const program = new Command();
 program
   .name("npo-start-downloader")
   .description("CLI to download npo start episodes")
-  .version("1.0.0");
+  .version("1.0.1");
 
 async function download(url) {
-  const information = await getEpisode(url);
-  const result = await downloadFromID(information);
+  const episodesData = await getEpisodesData(url);
+  const informationPromises = []
+  for (const episodeData of episodesData) {
+    const information = getInformation(episodeData);
+    informationPromises.push(information);
+  }
+
+  const EpisodesInformation = await Promise.all(informationPromises);
+
+  const result = []
+  for (const information of EpisodesInformation) {
+    result.push(await downloadFromID(information));
+  }
+
   console.log(result);
 }
 

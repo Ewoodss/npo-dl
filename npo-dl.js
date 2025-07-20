@@ -1,9 +1,11 @@
 import { XMLParser } from "fast-xml-parser";
 import getWvKeys from "./getwvkeys.js";
-import { existsSync, mkdirSync, writeFile } from "node:fs";
+import { existsSync, fstat, mkdirSync, readFileSync, writeFile } from "node:fs";
 import process from "node:process";
-import { getKeyPath, getVideoPath, parseBoolean } from "./utils.js";
+import { getKeyPath, getVideoPath, parseBoolean, fileExists } from "./utils.js";
 import axios from "axios";
+import { readFile } from "node:fs";
+import { json } from "node:stream/consumers";
 
 const options = {
   ignoreAttributes: false,
@@ -31,190 +33,11 @@ if (!existsSync(videoPath)) {
   mkdirSync(videoPath + "/keys");
 }
 
-async function getEpisode(url) {
-  const result = await getInformation(url);
-  return result;
-}
+async function getEmbededJsonData(url) {
+  console.debug(`getEmbededJsonData: ${url}`);
 
-function getEpisodesInOrder(firstId, episodeCount) {
-  const index = firstId.lastIndexOf("_") + 1;
-
-  const id = firstId.substring(index, firstId.length);
-  let prefix = firstId.substring(0, index);
-  // if id start with 0 add 0 to the prefix
-  if (id.startsWith("0")) {
-    prefix += "0";
-  }
-  const urls = [];
-  for (let i = 0; i < episodeCount; i++) {
-    const episodeId = prefix + (parseInt(id) + i);
-    urls.push(`https://www.npostart.nl/${episodeId}`);
-  }
-  return getEpisodes(urls);
-}
-
-async function getAllEpisodesFromShow(url, seasonCount = -1, reverse = false) {
-  const page = await browser.newPage();
-
-  await page.goto(url);
-
-  const jsonData = await page.evaluate(() => {
-    return JSON.parse(document.getElementById("__NEXT_DATA__").innerText) ||
-      null;
-  });
-
-  if (jsonData === null) {
-    console.log("Error retrieving show data");
-    return null;
-  }
-
-  await page.close();
-
-  const show =
-    jsonData["props"]["pageProps"]["dehydratedState"]["queries"][0]["state"][
-      "data"
-    ]["slug"];
-  const seasons =
-    jsonData["props"]["pageProps"]["dehydratedState"]["queries"][1]["state"][
-      "data"
-    ];
-  if (!reverse) { // the normal season order is already reversed
-    seasons.reverse();
-  }
-
-  const seasonsLength = seasonCount !== -1 ? seasonCount : seasons.length;
-  const urls = [];
-  const perSeasonEpisodes = [];
-
-  for (let i = 0; i < seasonsLength; i++) {
-    const seasonEpisodes = getAllEpisodesFromSeason(
-      `https://npo.nl/start/serie/${show}/${seasons[i]["slug"]}`,
-      reverse,
-    );
-    perSeasonEpisodes.push(seasonEpisodes);
-  }
-
-  await Promise.all(perSeasonEpisodes)
-    .then((result) => {
-      for (const season of result) {
-        urls.push(...season);
-      }
-    });
-
-  return urls;
-}
-
-async function getAllEpisodesFromSeason(url, reverse = false) {
-  const page = await browser.newPage();
-
-  const urls = [];
-
-  await page.goto(url);
-
-  await page.waitForSelector("div[data-testid='btn-login']");
-  const jsonData = await page.evaluate(() => {
-    return JSON.parse(document.getElementById("__NEXT_DATA__").innerText) ||
-      null;
-  });
-
-  if (jsonData === null) {
-    console.log("Error retrieving episode data");
-    return null;
-  }
-
-  const show = jsonData["query"]["seriesSlug"];
-  const season = jsonData["query"]["seriesParams"][0];
-  const episodes =
-    jsonData["props"]["pageProps"]["dehydratedState"]["queries"][2]["state"][
-      "data"
-    ];
-  if (!reverse) { // the normal is already reversed, so if we want to start from the first episode we need to reverse it
-    episodes.reverse();
-  }
-
-  for (let x = 0; x < episodes.length; x++) {
-    let programKey = episodes[x]["programKey"];
-    let slug = episodes[x]["slug"];
-    let productId = episodes[x]["productId"];
-    console.log(`ep. ${programKey} - ${slug} - ${productId}`);
-    urls.push(`https://npo.nl/start/serie/${show}/${season}/${slug}/afspelen`);
-  }
-
-  await page.close();
-
-  return urls;
-}
-
-async function getEpisodes(urls) {
-  const promiseLogin = npoLogin();
-  let informationList = [];
-  await promiseLogin;
-
-  let count = 0;
-  for (const npo_url of urls) {
-    informationList.push(getInformation(npo_url));
-    if (count % 10 === 0) {
-      await Promise.all(informationList);
-    }
-  }
-
-  const list = await Promise.all(informationList);
-  await browser.close();
-
-  return downloadMulti(list, true);
-}
-
-async function downloadMulti(InformationList, runParallel = false) {
-  if (runParallel === true) {
-    let downloadPromises = [];
-    for (const information of InformationList) {
-      downloadPromises.push(downloadFromID(information));
-    }
-    return await Promise.all(downloadPromises);
-  }
-
-  let result = [];
-  for (const information of InformationList) {
-    result.push(await downloadFromID(information));
-  }
-  return result;
-}
-
-/**
- * @param {Page} page
- * @param {str} suffix
- * @returns {Promise<HTTPResponse>}
- */
-async function waitResponseSuffix(page, suffix) {
-  const response = page.waitForResponse(async (response) => {
-    const request = response.request();
-    const method = request.method().toUpperCase();
-
-    if (method != "GET" && method != "POST") {
-      return false;
-    }
-    const url = response.url();
-    if (!url.endsWith(suffix)) {
-      return false;
-    }
-
-    console.log(`request: ${url} method: ${method}`);
-    try {
-      const body = await response.buffer();
-    } catch (error) {
-      console.error("preflicht error");
-      return false;
-    }
-
-    return url.endsWith(suffix);
-  });
-  return await response;
-}
-
-async function getEpisodeData(url, config) {
   const response = await axios.get(
     url,
-    config,
   );
 
   const type_str = 'type="application/json"';
@@ -225,14 +48,103 @@ async function getEpisodeData(url, config) {
     json_end,
   );
 
-  const response_json = JSON.parse(json_str);
-  const slug = response_json.query.seriesParams[1];
+  return JSON.parse(json_str);
+}
 
-  const data =
-    response_json.props.pageProps.dehydratedState.queries[3].state.data;
+const urlTypes = Object.freeze({
+  EPISODE: "episode",
+  SEASON: "season",
+  SERIES: "series",
+  MOVIE: "movie",
 
+
+  UNKNOWN: "unknown",
+})
+
+
+async function getSeriesData(seriesSlug) {
+  const seasonRespone = await axios.get(`https://npo.nl/start/api/domain/series-seasons?slug=${seriesSlug}`)
+  const seasonQuery = seasonRespone.data
+  const episodesData = []
+
+  const seasonDataPromises = []
+
+  for (const season of seasonQuery) {
+    const seasonData = getSeasonData(seriesSlug, season.slug)
+    seasonDataPromises.push(seasonData)
+  }
+
+  const seasonData = await Promise.all(seasonDataPromises)
+  for (const season of seasonData) {
+    episodesData.push(...season)
+  }
+
+  return episodesData;
+}
+
+async function getSeasonData(seriesSlug, seasonSlug) {
+  const embeddedJsonData = await getEmbededJsonData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}`);
+  const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState;
+  const episodesQuery = dehydratedState.queries[3].state.data;
+
+
+  const episodesDataPromises = []
+  for (const episode of episodesQuery) {
+    const seriesSlug = episode.series.slug
+    const seasonSlug = episode.season.slug
+    const episodeData = getEpisodeData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}/${episode.slug}`)
+    episodesDataPromises.push(episodeData)
+  }
+  const episodesData = await Promise.all(episodesDataPromises)
+
+  return episodesData;
+}
+
+async function getEpisodesData(url) {
+  const embeddedJsonData = await getEmbededJsonData(url);
+  let urlType = urlTypes.UNKNOWN;
+  const query = embeddedJsonData.query;
+  if (query.hasOwnProperty("seriesSlug")) {
+    urlType = urlTypes.SERIES
+    if (query.hasOwnProperty("seriesParams")) {
+      urlType = urlTypes.SEASON
+      if (query.seriesParams.length > 1) {
+        urlType = urlTypes.EPISODE
+      }
+    }
+  }
+
+  const seriesSlug = query.seriesSlug;
+
+  console.log(`urlType: ${urlType}`);
+
+  if (urlType === urlTypes.SERIES) {
+    console.log("getting series data");
+    return await getSeriesData(seriesSlug);
+  }
+  else if (urlType === urlTypes.SEASON) {
+    console.log("getting season data");
+    return await getSeasonData(seriesSlug, query.seriesParams[0]);
+  }
+  else if (urlType === urlTypes.EPISODE) {
+    console.log("getting episode data");
+    const seasonSlug = query.seriesParams[0];
+    const episodeSlug = query.seriesParams[1];
+    return [await getEpisodeData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}/${episodeSlug}`)]
+  }
+  else {
+    throw new Error("Unknown url type");
+  }
+}
+
+
+async function getEpisodeData(url) {
+  const embeddedJsonData = await getEmbededJsonData(url);
+  const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState
+
+  const slug = embeddedJsonData.query.seriesParams[1];
+  const data = dehydratedState.queries[3].state.data;
   let episodeData = "";
-
   for (const episode of data) {
     if (episode.slug === slug) {
       episodeData = episode;
@@ -243,7 +155,9 @@ async function getEpisodeData(url, config) {
     throw new Error("Episode not found");
   }
 
-  return episodeData;
+  return {
+    productId: episodeData.productId, url: `${url}/afspelen`, series: episodeData.series.title, season: episodeData.season.seasonKey, title: episodeData.title, programKey: episodeData.programKey
+  };
 }
 
 async function getCookie(config) {
@@ -269,6 +183,7 @@ async function getJwtToken(productId, config) {
 }
 
 async function getStreamData(url, config) {
+  console.log(`Getting stream data for ${url}`)
   const streamData = await axios.post(
     "https://prod.npoplayer.nl/stream-link",
     {
@@ -277,7 +192,15 @@ async function getStreamData(url, config) {
       "referrerUrl": url,
     },
     config,
-  );
+  ).catch((error) => {
+    console.log("Most likely a premium episode, skipping...");
+  });
+
+  if (!streamData) {
+    return null;
+  }
+
+
   return streamData.data;
 }
 
@@ -286,7 +209,7 @@ async function getMpdData(mpdUrl, config) {
   return parser.parse(mpdData.data);
 }
 
-async function getInformation(url) {
+async function getInformation(episodeData) {
   let config = {
     headers: {
       "User-Agent":
@@ -298,11 +221,28 @@ async function getInformation(url) {
       "Connection": "keep-alive",
     },
   };
-  const episodeData = await getEpisodeData(url, config);
-  const productId = episodeData.productId;
+
+  const filename = await generateFileName(episodeData);
+  console.log(`${filename} - ${episodeData.url}`);
+  const keyPath = getKeyPath(filename);
+
+  const keyExists = await fileExists(keyPath);
+  if (keyExists) {
+    console.log(`key exists for ${keyPath}`)
+    // read key from file
+    const key = readFileSync(keyPath, "utf8");
+    return JSON.parse(key)
+  }
+
   config["headers"]["Cookie"] = await getCookie(config);
-  config["headers"]["Authorization"] = await getJwtToken(productId, config);
-  const streamData = await getStreamData(url, config);
+  config["headers"]["Authorization"] = await getJwtToken(episodeData.productId, config);
+  const streamData = await getStreamData(episodeData.url, config);
+
+  if (streamData === null) {
+    console.log("no stream data found");
+    return null;
+  }
+
   const mpdUrl = streamData["stream"]["streamURL"];
   const mpdData = await getMpdData(mpdUrl, config);
 
@@ -314,9 +254,7 @@ async function getInformation(url) {
   }
   const x_custom_data = streamData["stream"]["drmToken"] || "";
 
-  const filename = await generateFileName(episodeData);
-  console.log(`${filename} - ${url}`);
-  const keyPath = getKeyPath(filename);
+
 
   const information = {
     "filename": filename,
@@ -369,10 +307,10 @@ async function getWVKeys(pssh, x_custom_data) {
 }
 
 async function generateFileName(episodeData) {
-  const rawSerie = episodeData.series.title;
+  const rawSerie = episodeData.series;
   const rawTitle = episodeData.title;
   const rawNumber = episodeData.programKey;
-  const rawSeason = episodeData.season.seasonKey;
+  const rawSeason = episodeData.season;
 
   let filename = "";
 
@@ -397,4 +335,4 @@ const sleep = (milliseconds) => {
   return new Promise((success) => setTimeout(success, milliseconds));
 };
 
-export { getCookie, getEpisode, getInformation };
+export { getCookie, getEpisodesData, getInformation };
