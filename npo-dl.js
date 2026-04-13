@@ -1,9 +1,9 @@
-import { HTTPResponse, launch, Page } from "puppeteer-core";
 import { XMLParser } from "fast-xml-parser";
 import getWvKeys from "./getwvkeys.js";
-import { existsSync, mkdirSync, readFileSync, writeFile } from "node:fs";
+import { existsSync, fstat, mkdirSync, readFileSync, writeFile } from "node:fs";
 import process from "node:process";
-import { fileExists, getKeyPath, getVideoPath, parseBoolean } from "./utils.js";
+import { getKeyPath, getVideoPath, parseBoolean, fileExists } from "./utils.js";
+import axios from "axios";
 
 const options = {
   ignoreAttributes: false,
@@ -16,10 +16,6 @@ const WidevineProxyUrl =
 
 //set as environment variable or replace with your own key
 const authKey = process.env.GETWVKEYS_API_KEY || "";
-const email = process.env.NPO_EMAIL || "";
-const password = process.env.NPO_PASSW || "";
-const headless = parseBoolean(process.env.HEADLESS);
-
 // check that all required environment variables are set one by one
 if (!authKey) {
   console.error(
@@ -35,278 +31,209 @@ if (!existsSync(videoPath)) {
   mkdirSync(videoPath + "/keys");
 }
 
-const browser = await launch({ headless: headless, channel: "chrome" });
+async function getEmbededJsonData(url) {
+  console.debug(`getEmbededJsonData: ${url}`);
 
-async function npoLogin() {
-  const page = await browser.newPage();
-
-  await page.goto("https://npo.nl/start");
-
-  // check that email and password are set
-  if (!email) {
-    console.warn("NPO_EMAIL is not set");
-    page.close();
-    return;
-  }
-  if (!password) {
-    console.warn("NPO_PASSW is not set");
-    page.close();
-    return;
-  }
-
-  await page.waitForSelector("div[data-testid='btn-login']");
-  await page.click("div[data-testid='btn-login']");
-
-  await page.waitForSelector("#EmailAddress");
-  await page.$eval("#EmailAddress", (el, secret) => el.value = secret, email);
-  await page.$eval("#Password", (el, secret) => el.value = secret, password);
-
-  await sleep(1000);
-  await page.waitForSelector("button[value='login']");
-  await page.click("button[value='login']");
-
-  await page.waitForSelector(
-    "button[class='bg-transparent group w-full cursor-pointer']",
-  );
-  await page.click(
-    "button[class='bg-transparent group w-full cursor-pointer']",
+  const response = await axios.get(
+    url,
   );
 
-  await waitResponseSuffix(page, "session");
+  const type_str = 'type="application/json"';
+  const json_start = response.data.indexOf(type_str);
+  const json_end = response.data.lastIndexOf("</script>");
+  const json_str = response.data.substring(
+    json_start + type_str.length + 1,
+    json_end,
+  );
 
-  await page.close();
-  console.log("Login successful");
+  return JSON.parse(json_str);
 }
 
-async function getEpisode(url) {
-  const promiseLogin = npoLogin();
-  await promiseLogin;
-  const result = await getInformation(url);
-  await browser.close();
-  return result;
+const urlTypes = Object.freeze({
+  EPISODE: "episode",
+  SEASON: "season",
+  SERIES: "series",
+  MOVIE: "movie",
+
+
+  UNKNOWN: "unknown",
+})
+
+
+async function getSeriesData(seriesSlug) {
+  const seasonRespone = await axios.get(`https://npo.nl/start/api/domain/series-seasons?slug=${seriesSlug}`)
+  const seasonQuery = seasonRespone.data
+  const episodesData = []
+
+  const seasonDataPromises = []
+
+  for (const season of seasonQuery) {
+    const seasonData = getSeasonData(seriesSlug, season.slug)
+    seasonDataPromises.push(seasonData)
+  }
+
+  const seasonData = await Promise.all(seasonDataPromises)
+  for (const season of seasonData) {
+    episodesData.push(...season)
+  }
+
+  return episodesData;
 }
 
-function getEpisodesInOrder(firstId, episodeCount) {
-  const index = firstId.lastIndexOf("_") + 1;
+async function getSeasonData(seriesSlug, seasonSlug) {
+  const embeddedJsonData = await getEmbededJsonData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}`);
+  const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState;
+  const episodesQuery = dehydratedState.queries[4].state.data;
 
-  const id = firstId.substring(index, firstId.length);
-  let prefix = firstId.substring(0, index);
-  // if id start with 0 add 0 to the prefix
-  if (id.startsWith("0")) {
-    prefix += "0";
+
+  const episodesDataPromises = []
+  for (const episode of episodesQuery) {
+    const seriesSlug = episode.series.slug
+    const seasonSlug = episode.season.slug
+    const episodeData = getEpisodeData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}/${episode.slug}`)
+    episodesDataPromises.push(episodeData)
   }
-  const urls = [];
-  for (let i = 0; i < episodeCount; i++) {
-    const episodeId = prefix + (parseInt(id) + i);
-    urls.push(`https://www.npostart.nl/${episodeId}`);
-  }
-  return getEpisodes(urls);
+  const episodesData = await Promise.all(episodesDataPromises)
+
+  return episodesData;
 }
 
-async function getAllEpisodesFromShow(url, seasonCount = -1, reverse = false) {
-  const page = await browser.newPage();
-
-  await page.goto(url);
-
-  const jsonData = await page.evaluate(() => {
-    return JSON.parse(document.getElementById("__NEXT_DATA__").innerText) ||
-      null;
-  });
-
-  if (jsonData === null) {
-    console.log("Error retrieving show data");
-    return null;
-  }
-
-  await page.close();
-
-  const show =
-    jsonData["props"]["pageProps"]["dehydratedState"]["queries"][0]["state"][
-      "data"
-    ]["slug"];
-  const seasons =
-    jsonData["props"]["pageProps"]["dehydratedState"]["queries"][1]["state"][
-      "data"
-    ];
-  if (!reverse) { // the normal season order is already reversed
-    seasons.reverse();
-  }
-
-  const seasonsLength = seasonCount !== -1 ? seasonCount : seasons.length;
-  const urls = [];
-  const perSeasonEpisodes = [];
-
-  for (let i = 0; i < seasonsLength; i++) {
-    const seasonEpisodes = getAllEpisodesFromSeason(
-      `https://npo.nl/start/serie/${show}/${seasons[i]["slug"]}`,
-      reverse,
-    );
-    perSeasonEpisodes.push(seasonEpisodes);
-  }
-
-  await Promise.all(perSeasonEpisodes)
-    .then((result) => {
-      for (const season of result) {
-        urls.push(...season);
+async function getEpisodesData(url) {
+  const embeddedJsonData = await getEmbededJsonData(url);
+  let urlType = urlTypes.UNKNOWN;
+  const query = embeddedJsonData.query;
+  if (query.hasOwnProperty("seriesSlug")) {
+    urlType = urlTypes.SERIES
+    if (query.hasOwnProperty("seasonSlug")) {
+      urlType = urlTypes.SEASON
+      if (query.seasonSlug.length > 1) {
+        urlType = urlTypes.EPISODE
       }
-    });
+    }
+  } else if (query.hasOwnProperty("programSlug")) {
+    urlType = urlTypes.EPISODE
+  }
 
-  return urls;
+  const seriesSlug = query.seriesSlug;
+
+  console.log(`urlType: ${urlType}`);
+
+  if (urlType === urlTypes.SERIES) {
+    console.log("getting series data");
+    return await getSeriesData(seriesSlug);
+  }
+  else if (urlType === urlTypes.SEASON) {
+    console.log("getting season data");
+    return await getSeasonData(seriesSlug, query.seasonSlug[0]);
+  }
+  else if (urlType === urlTypes.EPISODE) {
+    console.log("getting episode data");
+    const episodeSlug = query.programSlug;
+    return [await getEpisodeData(`https://npo.nl/start/afspelen/${episodeSlug}`)]
+  }
+  else {
+    throw new Error("Unknown url type");
+  }
 }
 
-async function getAllEpisodesFromSeason(url, reverse = false) {
-  const page = await browser.newPage();
 
-  const urls = [];
+async function getEpisodeData(url) {
+  const embeddedJsonData = await getEmbededJsonData(url);
+  const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState
 
-  await page.goto(url);
+  const episodeData = dehydratedState.queries[0].state.data;
 
-  await page.waitForSelector("div[data-testid='btn-login']");
-  const jsonData = await page.evaluate(() => {
-    return JSON.parse(document.getElementById("__NEXT_DATA__").innerText) ||
-      null;
+
+  return {
+    productId: episodeData.productId, url: `${url}/afspelen`, series: episodeData.series.title, season: episodeData.season.seasonKey, title: episodeData.title, programKey: episodeData.programKey
+  };
+}
+
+async function getCookie(config) {
+  let result = await axios.request(
+    "https://npo.nl/start/api/auth/session",
+    config,
+  );
+
+  let responseCookies = [];
+  result.headers["set-cookie"].forEach((cookie) => {
+    responseCookies.push(cookie.substring(0, cookie.indexOf(";")));
   });
 
-  if (jsonData === null) {
-    console.log("Error retrieving episode data");
+  return responseCookies[0] + ";" + responseCookies[1];
+}
+
+async function getJwtToken(productId, config) {
+  const playerToken = await axios.request(
+    `https://npo.nl/start/api/domain/player-token?productId=${productId}`,
+    config,
+  );
+  return playerToken.data.jwt;
+}
+
+async function getStreamData(url, config) {
+  console.log(`Getting stream data for ${url}`)
+  const streamData = await axios.post(
+    "https://prod.npoplayer.nl/stream-link",
+    {
+      "profileName": "dash",
+      "drmType": "widevine",
+      "referrerUrl": url,
+    },
+    config,
+  ).catch((error) => {
+    console.log("Most likely a premium episode, skipping...");
+  });
+
+  if (!streamData) {
     return null;
   }
 
-  const show = jsonData["query"]["seriesSlug"];
-  const season = jsonData["query"]["seriesParams"][0];
-  const episodes =
-    jsonData["props"]["pageProps"]["dehydratedState"]["queries"][2]["state"][
-      "data"
-    ];
-  if (!reverse) { // the normal is already reversed, so if we want to start from the first episode we need to reverse it
-    episodes.reverse();
-  }
 
-  for (let x = 0; x < episodes.length; x++) {
-    let programKey = episodes[x]["programKey"];
-    let slug = episodes[x]["slug"];
-    let productId = episodes[x]["productId"];
-    console.log(`ep. ${programKey} - ${slug} - ${productId}`);
-    urls.push(`https://npo.nl/start/serie/${show}/${season}/${slug}/afspelen`);
-  }
-
-  await page.close();
-
-  return urls;
+  return streamData.data;
 }
 
-async function getEpisodes(urls) {
-  const promiseLogin = npoLogin();
-  let informationList = [];
-  await promiseLogin;
-
-  let count = 0;
-  for (const npo_url of urls) {
-    informationList.push(getInformation(npo_url));
-    if (count % 10 === 0) {
-      await Promise.all(informationList);
-    }
-  }
-
-  const list = await Promise.all(informationList);
-  await browser.close();
-
-  return downloadMulti(list, true);
+async function getMpdData(mpdUrl, config) {
+  const mpdData = await axios.request(mpdUrl, config);
+  return parser.parse(mpdData.data);
 }
 
-async function downloadMulti(InformationList, runParallel = false) {
-  if (runParallel === true) {
-    let downloadPromises = [];
-    for (const information of InformationList) {
-      downloadPromises.push(downloadFromID(information));
-    }
-    return await Promise.all(downloadPromises);
-  }
+async function getInformation(episodeData) {
+  let config = {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      "Accept":
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Connection": "keep-alive",
+    },
+  };
 
-  let result = [];
-  for (const information of InformationList) {
-    result.push(await downloadFromID(information));
-  }
-  return result;
-}
-
-/**
- * @param {Page} page
- * @param {str} suffix
- * @returns {Promise<HTTPResponse>}
- */
-async function waitResponseSuffix(page, suffix) {
-  const response = page.waitForResponse(async (response) => {
-    const request = response.request();
-    const method = request.method().toUpperCase();
-
-    if (method != "GET" && method != "POST") {
-      return false;
-    }
-    const url = response.url();
-    if (!url.endsWith(suffix)) {
-      return false;
-    }
-
-    console.log(`request: ${url} method: ${method}`);
-    try {
-      const body = await response.buffer();
-    } catch (error) {
-      console.error("preflicht error");
-      return false;
-    }
-
-    return url.endsWith(suffix);
-  });
-  return await response;
-}
-
-async function getInformation(url) {
-  const page = await browser.newPage();
-
-  await page.goto(url);
-  if (page.url() === "https://npo.nl/start") {
-    await page.close();
-    console.log(`Error wrong episode ID ${url}`);
-    return null;
-  }
-
-  // const iframe = await page.waitForSelector(`#iframe-${id}`);
-  await page.waitForSelector(`.bmpui-image`);
-  const filename = await generateFileName(page);
-
-  console.log(`${filename} - ${url}`);
+  const filename = await generateFileName(episodeData);
+  console.log(`${filename} - ${episodeData.url}`);
   const keyPath = getKeyPath(filename);
 
-  if (await fileExists(keyPath)) {
-    await page.close();
-    console.log("information already gathered");
-    return JSON.parse(readFileSync(keyPath, "utf8"));
+  const keyExists = await fileExists(keyPath);
+  if (keyExists) {
+    console.log(`key exists for ${keyPath}`)
+    // read key from file
+    const key = readFileSync(keyPath, "utf8");
+    return JSON.parse(key)
   }
-  console.log("gathering information");
 
-  const mpdPromise = waitResponseSuffix(page, "mpd");
-  const streamResponsePromise = waitResponseSuffix(page, "stream-link");
+  config["headers"]["Cookie"] = await getCookie(config);
+  config["headers"]["Authorization"] = await getJwtToken(episodeData.productId, config);
+  const streamData = await getStreamData(episodeData.url, config);
 
-  // reload the page to get the stream link
-  await page.reload();
-
-  const streamResponse = await streamResponsePromise;
-  const streamData = await streamResponse.json();
-
-  let x_custom_data = "";
-  try {
-    x_custom_data = streamData["stream"]["drmToken"] || "";
-  } catch (TypeError) {
-    const pageContent = await page.content();
-    if (pageContent.includes("Alleen te zien met NPO Plus")) {
-      console.log("Error content needs NPO Plus subscription");
-      return null;
-    }
+  if (streamData === null) {
+    console.log("no stream data found");
+    return null;
   }
-  const mpdResponse = await mpdPromise;
-  const mpdText = await mpdResponse.text();
-  const mpdData = parser.parse(mpdText);
+
+  const mpdUrl = streamData["stream"]["streamURL"];
+  const mpdData = await getMpdData(mpdUrl, config);
 
   let pssh = "";
   // check if the mpdData contains the necessary information
@@ -314,6 +241,9 @@ async function getInformation(url) {
     pssh = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"][3]
       .pssh || "";
   }
+  const x_custom_data = streamData["stream"]["drmToken"] || "";
+
+
 
   const information = {
     "filename": filename,
@@ -325,7 +255,7 @@ async function getInformation(url) {
 
   //if pssh and x_custom_data are not empty, get the keys
   if (pssh.length !== 0 && x_custom_data.length !== 0) {
-    const WVKey = await getWVKeys(pssh, x_custom_data);
+    const WVKey = (await getWVKeys(pssh, x_custom_data)).toString();
     information.wideVineKeyResponse = WVKey.trim();
   } else {
     console.log("probably no drm");
@@ -333,11 +263,6 @@ async function getInformation(url) {
 
   writeKeyFile(keyPath, JSON.stringify(information));
 
-  try {
-    await page.close();
-  } catch (error) {
-    console.error(error);
-  }
   return information;
 }
 
@@ -370,36 +295,24 @@ async function getWVKeys(pssh, x_custom_data) {
   return await promise;
 }
 
-async function generateFileName(page) {
-  const rawSerie = page.$eval(
-    ".font-bold.font-npo-scandia.leading-130.text-30 .line-clamp-2",
-    (el) => el["innerText"],
-  );
-  const rawTitle = page.$eval(
-    "h2.font-bold.font-npo-scandia.leading-130.text-22",
-    (el) => el["innerText"],
-  );
-  const rawNumber = page.$eval(
-    ".mb-24 .flex.items-center .leading-130.text-13 .line-clamp-1",
-    (el) => el["innerText"],
-  );
-  const rawSeason = page.$eval(
-    ".bg-card-3.font-bold.font-npo-scandia.inline-flex.items-center",
-    (el) => el["innerText"],
-  );
+async function generateFileName(episodeData) {
+  const rawSerie = episodeData.series;
+  const rawTitle = episodeData.title;
+  const rawNumber = episodeData.programKey;
+  const rawSeason = episodeData.season;
 
   let filename = "";
 
-  filename += (await rawSerie) + " - ";
+  filename += rawSerie + " - ";
   // remove word "Seizoen" from rawSeason
-  const seasonNumber = parseInt((await rawSeason).replace("Seizoen ", ""));
+  const seasonNumber = parseInt(rawSeason.replace("Seizoen ", ""));
   const episodeNumber = parseInt(
-    (await rawNumber).replace("Afl. ", "").split("•")[0],
+    rawNumber.replace("Afl. ", "").split("•")[0],
   );
   // add season and episode number to filename formatted as SxxExx
   filename += "S" + seasonNumber.toString().padStart(2, "0") + "E" +
     episodeNumber.toString().padStart(2, "0") + " - ";
-  filename += await rawTitle;
+  filename += rawTitle;
 
   // remove illegal characters from filename
   filename = filename.replace(/[/\\?%*:|"<>]/g, "#");
@@ -411,4 +324,4 @@ const sleep = (milliseconds) => {
   return new Promise((success) => setTimeout(success, milliseconds));
 };
 
-export { getEpisode, getInformation, npoLogin };
+export { getCookie, getEpisodesData, getInformation };

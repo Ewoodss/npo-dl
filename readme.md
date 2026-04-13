@@ -12,10 +12,6 @@ other versions might work but are not tested
 
 ## Setting up the environment
 
-### Chrome Browser
-
-Install the latest version of chrome browser for your operating system.
-
 ### for windows users
 
 ```powershell
@@ -42,18 +38,26 @@ brew install yt-dlp
 make sure too run the following commands in the root of the project
 
 ```bash
-npm install
+deno install
 ```
 
 ## the following environment variables are required
 
 - GETWVKEYS_API_KEY: this is a api key from the website
   [getwvkeys](https://getwvkeys.cc) this is used for decrypting the video stream
+
+### Currently only downloading public/free episodes is supported, this is for future use
+
 - NPO_EMAIL: this is the email address used to login to the npo website
 - NPO_PASSW: this is the password used to login to the npo website
 
 ## running the project
 
 ```bash
-node cli.js download <url>
+deno cli.js download <url>
+```
+
+## creating binary
+```bash
+deno compile cli.js
 ```
