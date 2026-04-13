@@ -85,7 +85,7 @@ async function getSeriesData(seriesSlug) {
 async function getSeasonData(seriesSlug, seasonSlug) {
   const embeddedJsonData = await getEmbededJsonData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}`);
   const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState;
-  const episodesQuery = dehydratedState.queries[3].state.data;
+  const episodesQuery = dehydratedState.queries[4].state.data;
 
 
   const episodesDataPromises = []
@@ -106,12 +106,14 @@ async function getEpisodesData(url) {
   const query = embeddedJsonData.query;
   if (query.hasOwnProperty("seriesSlug")) {
     urlType = urlTypes.SERIES
-    if (query.hasOwnProperty("seriesParams")) {
+    if (query.hasOwnProperty("seasonSlug")) {
       urlType = urlTypes.SEASON
-      if (query.seriesParams.length > 1) {
+      if (query.seasonSlug.length > 1) {
         urlType = urlTypes.EPISODE
       }
     }
+  } else if (query.hasOwnProperty("programSlug")) {
+    urlType = urlTypes.EPISODE
   }
 
   const seriesSlug = query.seriesSlug;
@@ -124,13 +126,12 @@ async function getEpisodesData(url) {
   }
   else if (urlType === urlTypes.SEASON) {
     console.log("getting season data");
-    return await getSeasonData(seriesSlug, query.seriesParams[0]);
+    return await getSeasonData(seriesSlug, query.seasonSlug[0]);
   }
   else if (urlType === urlTypes.EPISODE) {
     console.log("getting episode data");
-    const seasonSlug = query.seriesParams[0];
-    const episodeSlug = query.seriesParams[1];
-    return [await getEpisodeData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}/${episodeSlug}`)]
+    const episodeSlug = query.programSlug;
+    return [await getEpisodeData(`https://npo.nl/start/afspelen/${episodeSlug}`)]
   }
   else {
     throw new Error("Unknown url type");
@@ -142,18 +143,8 @@ async function getEpisodeData(url) {
   const embeddedJsonData = await getEmbededJsonData(url);
   const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState
 
-  const slug = embeddedJsonData.query.seriesParams[1];
-  const data = dehydratedState.queries[3].state.data;
-  let episodeData = "";
-  for (const episode of data) {
-    if (episode.slug === slug) {
-      episodeData = episode;
-      break;
-    }
-  }
-  if (episodeData === "") {
-    throw new Error("Episode not found");
-  }
+  const episodeData = dehydratedState.queries[0].state.data;
+
 
   return {
     productId: episodeData.productId, url: `${url}/afspelen`, series: episodeData.series.title, season: episodeData.season.seasonKey, title: episodeData.title, programKey: episodeData.programKey
@@ -266,7 +257,7 @@ async function getInformation(episodeData) {
 
   //if pssh and x_custom_data are not empty, get the keys
   if (pssh.length !== 0 && x_custom_data.length !== 0) {
-    const WVKey = await getWVKeys(pssh, x_custom_data);
+    const WVKey = (await getWVKeys(pssh, x_custom_data)).toString();
     information.wideVineKeyResponse = WVKey.trim();
   } else {
     console.log("probably no drm");
