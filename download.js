@@ -56,12 +56,12 @@ async function downloadMpd(mpdUrl, filename) {
         filenameFormat,
         mpdUrl,
     ];
-    return runCommand("yt-dlp", args, filename);
+    return await runCommand("yt-dlp", args, filename);
 }
 
 async function decryptFiles(filename, key) {
     //console.log(videoPath);
-    let encryptedFilename = "encrypted#" + filename;
+    const encryptedFilename = "encrypted#" + filename;
 
     const mp4File = videoPath + encryptedFilename + ".mp4";
     const m4aFile = videoPath + encryptedFilename + ".m4a";
@@ -104,7 +104,7 @@ async function combineVideoAndAudio(filename, video, audio, key) {
             combinedFileName,
         ];
     }
-    return runCommand("ffmpeg", args, combinedFileName);
+    return await runCommand("ffmpeg", args, combinedFileName);
 }
 
 export { downloadFromID };

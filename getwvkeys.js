@@ -103,14 +103,14 @@ class getWvKeys {
       "Content-Type": "application/json",
     };
 
-    let config = {
+    const config = {
       method: "post",
       url: this.apiUrl,
       headers: header,
       data: this.data,
     };
 
-    let decrypterResponse = await axios(config);
+    const decrypterResponse = await axios(config);
 
     // check if response is ok
     if (decrypterResponse.status !== 200) {
@@ -124,14 +124,14 @@ class getWvKeys {
   }
 
   async getWvKeys() {
-    let licenseData = await this.generate_request();
+    const licenseData = await this.generate_request();
 
     if (licenseData["cache"] === true) {
       return licenseData["keys"][0]["key"];
     }
 
-    let license_response = await this.post_request(licenseData["challenge"]);
-    let decrypt_response = await this.decrypter(license_response);
+    const license_response = await this.post_request(licenseData["challenge"]);
+    const decrypt_response = await this.decrypter(license_response);
 
     return decrypt_response["keys"][0];
   }

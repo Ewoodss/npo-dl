@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "cli": "deno run --watch -A cli.js",
+    "build": "deno compile -A cli.js"
+  },
+  "nodeModulesDir": "auto",
+  "imports": {
+    "axios": "npm:axios@^1.15.0",
+    "commander": "npm:commander@^14.0.3",
+    "fast-xml-parser": "npm:fast-xml-parser@^5.5.12"
+  }
+}

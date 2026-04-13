@@ -1,8 +1,8 @@
 import { XMLParser } from "fast-xml-parser";
 import getWvKeys from "./getwvkeys.js";
-import { existsSync, fstat, mkdirSync, readFileSync, writeFile } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFile } from "node:fs";
 import process from "node:process";
-import { getKeyPath, getVideoPath, parseBoolean, fileExists } from "./utils.js";
+import { getKeyPath, getVideoPath, fileExists } from "./utils.js";
 import axios from "axios";
 
 const options = {
@@ -150,12 +150,12 @@ async function getEpisodeData(url) {
 }
 
 async function getCookie(config) {
-  let result = await axios.request(
+  const result = await axios.request(
     "https://npo.nl/start/api/auth/session",
     config,
   );
 
-  let responseCookies = [];
+  const responseCookies = [];
   result.headers["set-cookie"].forEach((cookie) => {
     responseCookies.push(cookie.substring(0, cookie.indexOf(";")));
   });
@@ -181,7 +181,7 @@ async function getStreamData(url, config) {
       "referrerUrl": url,
     },
     config,
-  ).catch((error) => {
+  ).catch(() => {
     console.log("Most likely a premium episode, skipping...");
   });
 
@@ -199,7 +199,7 @@ async function getMpdData(mpdUrl, config) {
 }
 
 async function getInformation(episodeData) {
-  let config = {
+  const config = {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
@@ -211,7 +211,7 @@ async function getInformation(episodeData) {
     },
   };
 
-  const filename = await generateFileName(episodeData);
+  const filename = generateFileName(episodeData);
   console.log(`${filename} - ${episodeData.url}`);
   const keyPath = getKeyPath(filename);
 
@@ -295,7 +295,7 @@ async function getWVKeys(pssh, x_custom_data) {
   return await promise;
 }
 
-async function generateFileName(episodeData) {
+function generateFileName(episodeData) {
   const rawSerie = episodeData.series;
   const rawTitle = episodeData.title;
   const rawNumber = episodeData.programKey;
@@ -320,8 +320,5 @@ async function generateFileName(episodeData) {
   return filename;
 }
 
-const sleep = (milliseconds) => {
-  return new Promise((success) => setTimeout(success, milliseconds));
-};
 
 export { getCookie, getEpisodesData, getInformation };
