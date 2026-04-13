@@ -4,8 +4,6 @@ import { existsSync, fstat, mkdirSync, readFileSync, writeFile } from "node:fs";
 import process from "node:process";
 import { getKeyPath, getVideoPath, parseBoolean, fileExists } from "./utils.js";
 import axios from "axios";
-import { readFile } from "node:fs";
-import { json } from "node:stream/consumers";
 
 const options = {
   ignoreAttributes: false,

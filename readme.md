@@ -12,10 +12,6 @@ other versions might work but are not tested
 
 ## Setting up the environment
 
-### Chrome Browser
-
-Install the latest version of chrome browser for your operating system.
-
 ### for windows users
 
 ```powershell
@@ -42,7 +38,7 @@ brew install yt-dlp
 make sure too run the following commands in the root of the project
 
 ```bash
-npm install
+deno install
 ```
 
 ## the following environment variables are required
@@ -58,5 +54,10 @@ npm install
 ## running the project
 
 ```bash
-node cli.js download <url>
+deno cli.js download <url>
+```
+
+## creating binary
+```bash
+deno compile cli.js
 ```
