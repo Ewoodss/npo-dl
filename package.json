@@ -8,6 +8,7 @@
     "build": "deno compile -A cli.js"
   },
   "engines": {
+    "node": ">=20.0.0",
     "deno": ">=2.2.2"
   },
   "author": "",
