@@ -18,6 +18,7 @@ class getWvKeys {
     this.apiUrl = apiUrl;
     this.buildInfo = buildInfo;
     this.force = force;
+    this.x_custom_data = x_custom_data; // Store for use in post_request
     this.data = {
       "pssh": this.pssh,
       "buildInfo": this.buildInfo,
@@ -88,19 +89,47 @@ class getWvKeys {
   }
 
   async post_request(challenge) {
+    let url = this.licenseUrl;
+    let headers = { ...this.headers };
+
+    // Check if x_custom_data contains auth/sig parameters (new endpoint format)
+    let authParams = null;
+    try {
+      if (this.x_custom_data && typeof this.x_custom_data === 'string' && this.x_custom_data.startsWith("{")) {
+        const parsed = JSON.parse(this.x_custom_data);
+        if (parsed.auth && parsed.sig) {
+          authParams = parsed;
+          // Add auth and sig as query parameters for the new endpoint
+          const separator = url.includes("?") ? "&" : "?";
+          url = url + separator + "auth=" + encodeURIComponent(parsed.auth) + "&sig=" + encodeURIComponent(parsed.sig);
+          if (this.verbose) {
+            log("Using new endpoint with auth/sig query parameters");
+          }
+        }
+      }
+    } catch (e) {
+      // Not JSON, treat as legacy drmToken
+      if (this.verbose) {
+        log("x_custom_data is not auth/sig JSON, treating as legacy drmToken");
+      }
+    }
+
     const config = {
       method: "post",
-      url: this.licenseUrl,
-      headers: this.headers,
+      url: url,
+      headers: headers,
       data: challenge,
       responseType: "arraybuffer",
       validateStatus: false, // Don't throw on any status code
     };
 
     if (this.verbose) {
-      log("Posting challenge to: " + this.licenseUrl);
+      log("Posting challenge to: " + url);
       log("Challenge size: " + challenge.length + " bytes");
-      log("Request headers: " + JSON.stringify(this.headers));
+      log("Request headers: " + JSON.stringify(headers));
+      if (authParams) {
+        log("Auth params present: auth + sig");
+      }
     }
 
     let licenseResponse = await axios(config);

@@ -249,7 +249,20 @@ async function getInformation(episodeData) {
     pssh = widevineContent.pssh || "";
     console.log(pssh)
   }
-  const x_custom_data = streamData["stream"]["drmToken"] || "";
+
+  // The new endpoint uses auth and sig parameters instead of drmToken
+  // Check for various possible locations in the response
+  let authParam = streamData["stream"]["auth"] || streamData["stream"]["authentication"] || "";
+  let sigParam = streamData["stream"]["sig"] || streamData["stream"]["signature"] || "";
+  let x_custom_data = streamData["stream"]["drmToken"] || "";
+
+  // If we have auth/sig params, pass them as custom data
+  if (authParam && sigParam) {
+    x_custom_data = JSON.stringify({ auth: authParam, sig: sigParam });
+    console.log("Using new endpoint parameters (auth + sig)");
+  } else if (x_custom_data) {
+    console.log("Using legacy drmToken");
+  }
 
 
 
