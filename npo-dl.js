@@ -230,7 +230,6 @@ async function getInformation(episodeData) {
 
   if (streamData === null) {
     console.log("no stream data found");
-    console.log(config["headers"]);
     return null;
   }
 
@@ -255,13 +254,12 @@ async function getInformation(episodeData) {
   const information = {
     "filename": filename,
     "pssh": pssh,
-    "x_custom_data": "",
     "mpdUrl": streamData["stream"]["streamURL"],
     "wideVineKeyResponse": null,
   };
 
   if (pssh.length !== 0) {
-    const WVKey = (await getWVKeys(pssh, "", widevineProxyUrl)).toString();
+    const WVKey = (await getWVKeys(pssh, widevineProxyUrl)).toString();
     information.wideVineKeyResponse = WVKey.trim();
   } else {
     console.log("probably no drm");
@@ -282,7 +280,7 @@ function writeKeyFile(path, data) {
   });
 }
 
-async function getWVKeys(pssh, x_custom_data, customLicenseUrl) {
+async function getWVKeys(pssh, customLicenseUrl) {
   const promise = new Promise((success, reject) => {
     if (authKey === "") {
       reject("no auth key");
@@ -294,7 +292,7 @@ async function getWVKeys(pssh, x_custom_data, customLicenseUrl) {
       pssh,
       licenseUrl,
       authKey,
-      x_custom_data,
+      "",
       "https://getwvkeys.cc/pywidevine",
       "",
       false,
