@@ -11,9 +11,6 @@ const options = {
 };
 const parser = new XMLParser(options);
 
-// Updated Widevine proxy endpoint - NPO changed their DRM gateway
-// Old endpoint: https://npo-drm-gateway.samgcloud.nepworldwide.nl/authentication
-// New endpoint: https://drm.npoplayer.nl/proxyEngine.aspx
 const WidevineProxyUrl =
   "https://drm.npoplayer.nl/proxyEngine.aspx";
 
@@ -250,34 +247,21 @@ async function getInformation(episodeData) {
     console.log(pssh)
   }
 
-  // Extract the license URL from the DRM configuration
-  // The new NPO endpoint provides the complete licenseUrl with auth and sig parameters embedded
-  let widevineProxyUrl = WidevineProxyUrl; // fallback to old endpoint
-  let x_custom_data = "";
-
+  let widevineProxyUrl = WidevineProxyUrl;
   if (streamData["stream"]["drm"] && streamData["stream"]["drm"]["licenseUrl"]) {
     widevineProxyUrl = streamData["stream"]["drm"]["licenseUrl"];
-    console.log("✓ Using DRM licenseUrl from stream response (includes auth & sig)");
-  } else if (streamData["stream"]["drmToken"]) {
-    x_custom_data = streamData["stream"]["drmToken"];
-    console.log("✓ Using legacy drmToken");
-  } else {
-    console.log("⚠ No DRM configuration found in stream response");
   }
-
-
 
   const information = {
     "filename": filename,
     "pssh": pssh,
-    "x_custom_data": x_custom_data,
+    "x_custom_data": "",
     "mpdUrl": streamData["stream"]["streamURL"],
     "wideVineKeyResponse": null,
   };
 
-  //if pssh is not empty, get the keys (x_custom_data or widevineProxyUrl should be available)
   if (pssh.length !== 0) {
-    const WVKey = (await getWVKeys(pssh, x_custom_data, widevineProxyUrl)).toString();
+    const WVKey = (await getWVKeys(pssh, "", widevineProxyUrl)).toString();
     information.wideVineKeyResponse = WVKey.trim();
   } else {
     console.log("probably no drm");
@@ -299,15 +283,11 @@ function writeKeyFile(path, data) {
 }
 
 async function getWVKeys(pssh, x_custom_data, customLicenseUrl) {
-  console.log("getting keys from website");
   const promise = new Promise((success, reject) => {
     if (authKey === "") {
       reject("no auth key");
     }
-    // Enable verbose logging for debugging the new endpoint
     const verboseMode = process.env.NPO_DL_VERBOSE === "true" || process.env.DEBUG === "true";
-
-    // Use custom license URL if provided, otherwise fall back to the default
     const licenseUrl = customLicenseUrl || WidevineProxyUrl;
 
     const js_getWVKeys = new getWvKeys(
@@ -315,10 +295,10 @@ async function getWVKeys(pssh, x_custom_data, customLicenseUrl) {
       licenseUrl,
       authKey,
       x_custom_data,
-      "https://getwvkeys.cc/pywidevine", // default API URL
-      "", // buildInfo
-      false, // force
-      verboseMode // enable verbose logging
+      "https://getwvkeys.cc/pywidevine",
+      "",
+      false,
+      verboseMode
     );
     js_getWVKeys.getWvKeys().then((result) => {
       success(result);
