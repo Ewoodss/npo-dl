@@ -11,8 +11,11 @@ const options = {
 };
 const parser = new XMLParser(options);
 
+// Updated Widevine proxy endpoint - NPO changed their DRM gateway
+// Old endpoint: https://npo-drm-gateway.samgcloud.nepworldwide.nl/authentication
+// New endpoint: https://drm.npoplayer.nl/proxyEngine.aspx
 const WidevineProxyUrl =
-  "https://npo-drm-gateway.samgcloud.nepworldwide.nl/authentication";
+  "https://drm.npoplayer.nl/proxyEngine.aspx";
 
 //set as environment variable or replace with your own key
 const authKey = process.env.GETWVKEYS_API_KEY || "";
@@ -282,14 +285,23 @@ async function getWVKeys(pssh, x_custom_data) {
     if (authKey === "") {
       reject("no auth key");
     }
+    // Enable verbose logging for debugging the new endpoint
+    const verboseMode = process.env.NPO_DL_VERBOSE === "true" || process.env.DEBUG === "true";
     const js_getWVKeys = new getWvKeys(
       pssh,
       WidevineProxyUrl,
       authKey,
       x_custom_data,
+      "https://getwvkeys.cc/pywidevine", // default API URL
+      "", // buildInfo
+      false, // force
+      verboseMode // enable verbose logging
     );
     js_getWVKeys.getWvKeys().then((result) => {
       success(result);
+    }).catch((error) => {
+      console.error("Error getting Widevine keys:", error);
+      reject(error);
     });
   });
   return await promise;

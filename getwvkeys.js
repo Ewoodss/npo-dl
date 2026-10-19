@@ -41,25 +41,44 @@ class getWvKeys {
       validateStatus: false,
     };
 
+    if (this.verbose) {
+      log("Generating license request...");
+      log("API URL: " + this.apiUrl);
+      log("License URL (proxy): " + this.licenseUrl);
+      log("PSSH: " + this.pssh.substring(0, 50) + "...");
+    }
+
     const licenseResponse = await axios(config);
     //get json from response
     const licenseData = licenseResponse.data;
 
     const responseHeaders = licenseResponse.headers;
     if (this.verbose) {
-      log("headers: " + JSON.stringify(responseHeaders));
+      log("Generate request response status: " + licenseResponse.status);
+      log("Response headers: " + JSON.stringify(responseHeaders));
+      log("Response data keys: " + (typeof licenseData === 'object' ? Object.keys(licenseData).join(', ') : 'not an object'));
     }
 
     if ("x-cache" in responseHeaders) {
+      if (this.verbose) {
+        log("Cache hit! Using cached keys");
+      }
       return { "cache": true, "keys": licenseData["keys"] };
+    }
+
+    if (!licenseData["session_id"]) {
+      log("Error: No session_id in response", true);
+      log("Response: " + JSON.stringify(licenseData).substring(0, 500), true);
+      return { "cache": false, "challenge": null, "error": "No session_id" };
     }
 
     this.data["session_id"] = licenseData["session_id"];
     let challenge = licenseData["challenge"];
 
     if (this.verbose) {
-      log("License Request Generated\n", challenge);
-      log("Session ID:", this.data["session_id"]);
+      log("License Request Generated");
+      log("Session ID: " + this.data["session_id"]);
+      log("Challenge size: " + (challenge ? Buffer.from(challenge, "base64").length : 0) + " bytes");
     }
 
     //turn challenge into byte array it's encoded in base64
@@ -75,12 +94,30 @@ class getWvKeys {
       headers: this.headers,
       data: challenge,
       responseType: "arraybuffer",
+      validateStatus: false, // Don't throw on any status code
     };
 
+    if (this.verbose) {
+      log("Posting challenge to: " + this.licenseUrl);
+      log("Challenge size: " + challenge.length + " bytes");
+      log("Request headers: " + JSON.stringify(this.headers));
+    }
+
     let licenseResponse = await axios(config);
+
+    if (this.verbose) {
+      log("Response Status: " + licenseResponse.status);
+      log("Response Headers: " + JSON.stringify(licenseResponse.headers));
+      log("Response Size: " + (licenseResponse.data ? licenseResponse.data.length : 0) + " bytes");
+    }
+
     // check if response is ok
     if (licenseResponse.status !== 200) {
-      log("License Request Failed" + licenseResponse.data.toString(), true);
+      log("License Request Failed - Status: " + licenseResponse.status, true);
+      if (licenseResponse.data) {
+        const responseText = licenseResponse.data.toString().substring(0, 500);
+        log("Response: " + responseText, true);
+      }
       return;
     }
 
@@ -90,7 +127,7 @@ class getWvKeys {
     );
 
     if (this.verbose) {
-      log("License Response Generated\n" + licenseResponse);
+      log("License Response Generated (base64 length: " + licenseResponse.length + ")");
     }
 
     return licenseResponse;
