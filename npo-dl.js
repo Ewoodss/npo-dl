@@ -228,10 +228,12 @@ async function getInformation(episodeData) {
 
   config["headers"]["Cookie"] = await getCookie(config);
   config["headers"]["Authorization"] = await getJwtToken(episodeData.productId, config);
+
   const streamData = await getStreamData(episodeData.url, config);
 
   if (streamData === null) {
     console.log("no stream data found");
+    console.log(config["headers"]);
     return null;
   }
 
@@ -241,8 +243,11 @@ async function getInformation(episodeData) {
   let pssh = "";
   // check if the mpdData contains the necessary information
   if ("ContentProtection" in mpdData["MPD"]["Period"]["AdaptationSet"][1]) {
-    pssh = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"][3]
-      .pssh || "";
+    const contentProtections = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"]
+    // filter out where @_value==widevine
+    const widevineContent = contentProtections.filter((contentProtection) => contentProtection["@_value"] === "Widevine")[0]
+    pssh = widevineContent.pssh || "";
+    console.log(pssh)
   }
   const x_custom_data = streamData["stream"]["drmToken"] || "";
 
