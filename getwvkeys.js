@@ -10,7 +10,6 @@ class getWvKeys {
     apiUrl = "https://getwvkeys.cc/pywidevine",
     buildInfo = "",
     force = false,
-    verbose = false,
   ) {
     this.pssh = pssh;
     this.licenseUrl = licenseUrl;
@@ -29,7 +28,6 @@ class getWvKeys {
       "Content-Type": "application/json",
     };
     this.headers["x-custom-data"] = x_custom_data;
-    this.verbose = verbose;
   }
 
   async generate_request() {

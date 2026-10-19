@@ -285,7 +285,6 @@ async function getWVKeys(pssh, customLicenseUrl) {
     if (authKey === "") {
       reject("no auth key");
     }
-    const verboseMode = process.env.NPO_DL_VERBOSE === "true" || process.env.DEBUG === "true";
     const licenseUrl = customLicenseUrl || WidevineProxyUrl;
 
     const js_getWVKeys = new getWvKeys(
@@ -295,8 +294,7 @@ async function getWVKeys(pssh, customLicenseUrl) {
       "",
       "https://getwvkeys.cc/pywidevine",
       "",
-      false,
-      verboseMode
+      false
     );
     js_getWVKeys.getWvKeys().then((result) => {
       success(result);
