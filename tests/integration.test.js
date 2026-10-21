@@ -7,6 +7,7 @@
 import { assertEquals, assert, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
 
 const TIMEOUT = 30000; // 30 seconds per test
+const ENABLE_NETWORK_TESTS = Deno.env.get("ENABLE_NETWORK_TESTS") === "true";
 
 /**
  * Test: Fetch session cookie from NPO auth endpoint
@@ -41,7 +42,7 @@ Deno.test({
       }
     }
   },
-  ignore: !globalThis.ENABLE_NETWORK_TESTS,
+  ignore: !ENABLE_NETWORK_TESTS,
   timeout: TIMEOUT,
 });
 
@@ -95,7 +96,7 @@ Deno.test({
       }
     }
   },
-  ignore: !globalThis.ENABLE_NETWORK_TESTS,
+  ignore: !ENABLE_NETWORK_TESTS,
   timeout: TIMEOUT,
 });
 
@@ -161,7 +162,7 @@ Deno.test({
       }
     }
   },
-  ignore: !globalThis.ENABLE_NETWORK_TESTS,
+  ignore: !ENABLE_NETWORK_TESTS,
   timeout: TIMEOUT,
 });
 
@@ -207,7 +208,7 @@ Deno.test({
       }
     }
   },
-  ignore: !globalThis.ENABLE_NETWORK_TESTS,
+  ignore: !ENABLE_NETWORK_TESTS,
   timeout: TIMEOUT,
 });
 
@@ -250,7 +251,7 @@ Deno.test({
       }
     }
   },
-  ignore: !globalThis.ENABLE_NETWORK_TESTS,
+  ignore: !ENABLE_NETWORK_TESTS,
   timeout: TIMEOUT,
 });
 
