@@ -10,7 +10,7 @@ const program = new Command();
 program
   .name("npo-start-downloader")
   .description("CLI to download npo start episodes, seasons, or series")
-  .version("1.0.2");
+  .version("1.1.1");
 
 async function processEpisodes(episodesData, keysOnly = false) {
   console.log(`Processing ${episodesData.length} episode(s)...`);
