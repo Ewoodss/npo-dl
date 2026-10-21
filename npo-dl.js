@@ -12,7 +12,7 @@ const options = {
 const parser = new XMLParser(options);
 
 const WidevineProxyUrl =
-  "https://npo-drm-gateway.samgcloud.nepworldwide.nl/authentication";
+  "https://drm.npoplayer.nl/proxyEngine.aspx";
 
 //set as environment variable or replace with your own key
 const authKey = process.env.GETWVKEYS_API_KEY || "";
@@ -60,6 +60,14 @@ const urlTypes = Object.freeze({
 })
 
 
+function getDataFromQueries(queries, queryKey) {
+  const query = queries.find(query => query.queryKey[0].includes(queryKey));
+  if (query) {
+    return query.state.data;
+  }
+  return null;
+}
+
 async function getSeriesData(seriesSlug) {
   const seasonRespone = await axios.get(`https://npo.nl/start/api/domain/series-seasons?slug=${seriesSlug}`)
   const seasonQuery = seasonRespone.data
@@ -83,8 +91,7 @@ async function getSeriesData(seriesSlug) {
 async function getSeasonData(seriesSlug, seasonSlug) {
   const embeddedJsonData = await getEmbededJsonData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}`);
   const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState;
-  const episodesQuery = dehydratedState.queries[4].state.data;
-
+  const episodesQuery = getDataFromQueries(dehydratedState.queries, "programs:season")
 
   const episodesDataPromises = []
   for (const episode of episodesQuery) {
@@ -140,9 +147,7 @@ async function getEpisodesData(url) {
 async function getEpisodeData(url) {
   const embeddedJsonData = await getEmbededJsonData(url);
   const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState
-
-  const episodeData = dehydratedState.queries[0].state.data;
-
+  const episodeData = getDataFromQueries(dehydratedState.queries, "program:detail")
 
   return {
     productId: episodeData.productId, url: `${url}/afspelen`, series: episodeData.series.title, season: episodeData.season.seasonKey, title: episodeData.title, programKey: episodeData.programKey
@@ -185,7 +190,7 @@ async function getStreamData(url, config) {
     console.log("Most likely a premium episode, skipping...");
   });
 
-  if (!streamData) {
+  if (!streamData || streamData.status !== 200) {
     return null;
   }
 
@@ -225,6 +230,7 @@ async function getInformation(episodeData) {
 
   config["headers"]["Cookie"] = await getCookie(config);
   config["headers"]["Authorization"] = await getJwtToken(episodeData.productId, config);
+
   const streamData = await getStreamData(episodeData.url, config);
 
   if (streamData === null) {
@@ -238,24 +244,26 @@ async function getInformation(episodeData) {
   let pssh = "";
   // check if the mpdData contains the necessary information
   if ("ContentProtection" in mpdData["MPD"]["Period"]["AdaptationSet"][1]) {
-    pssh = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"][3]
-      .pssh || "";
+    const contentProtections = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"]
+    // filter out where @_value==widevine
+    const widevineContent = contentProtections.filter((contentProtection) => contentProtection["@_value"] === "Widevine")[0]
+    pssh = widevineContent.pssh || "";
   }
-  const x_custom_data = streamData["stream"]["drmToken"] || "";
 
-
+  let widevineProxyUrl = WidevineProxyUrl;
+  if (streamData["stream"]["drm"] && streamData["stream"]["drm"]["licenseUrl"]) {
+    widevineProxyUrl = streamData["stream"]["drm"]["licenseUrl"];
+  }
 
   const information = {
     "filename": filename,
     "pssh": pssh,
-    "x_custom_data": x_custom_data,
     "mpdUrl": streamData["stream"]["streamURL"],
     "wideVineKeyResponse": null,
   };
 
-  //if pssh and x_custom_data are not empty, get the keys
-  if (pssh.length !== 0 && x_custom_data.length !== 0) {
-    const WVKey = (await getWVKeys(pssh, x_custom_data)).toString();
+  if (pssh.length !== 0) {
+    const WVKey = (await getWVKeys(pssh, widevineProxyUrl)).toString();
     information.wideVineKeyResponse = WVKey.trim();
   } else {
     console.log("probably no drm");
@@ -276,20 +284,27 @@ function writeKeyFile(path, data) {
   });
 }
 
-async function getWVKeys(pssh, x_custom_data) {
-  console.log("getting keys from website");
+async function getWVKeys(pssh, customLicenseUrl) {
   const promise = new Promise((success, reject) => {
     if (authKey === "") {
       reject("no auth key");
     }
+    const licenseUrl = customLicenseUrl || WidevineProxyUrl;
+
     const js_getWVKeys = new getWvKeys(
       pssh,
-      WidevineProxyUrl,
+      licenseUrl,
       authKey,
-      x_custom_data,
+      "",
+      "https://getwvkeys.cc/pywidevine",
+      "",
+      false
     );
     js_getWVKeys.getWvKeys().then((result) => {
       success(result);
+    }).catch((error) => {
+      console.error("Error getting Widevine keys:", error);
+      reject(error);
     });
   });
   return await promise;

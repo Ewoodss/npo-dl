@@ -10,7 +10,6 @@ class getWvKeys {
     apiUrl = "https://getwvkeys.cc/pywidevine",
     buildInfo = "",
     force = false,
-    verbose = false,
   ) {
     this.pssh = pssh;
     this.licenseUrl = licenseUrl;
@@ -29,7 +28,6 @@ class getWvKeys {
       "Content-Type": "application/json",
     };
     this.headers["x-custom-data"] = x_custom_data;
-    this.verbose = verbose;
   }
 
   async generate_request() {
@@ -46,21 +44,17 @@ class getWvKeys {
     const licenseData = licenseResponse.data;
 
     const responseHeaders = licenseResponse.headers;
-    if (this.verbose) {
-      log("headers: " + JSON.stringify(responseHeaders));
-    }
-
     if ("x-cache" in responseHeaders) {
       return { "cache": true, "keys": licenseData["keys"] };
     }
 
+    if (!licenseData["session_id"]) {
+      log("Error: No session_id in response", true);
+      return { "cache": false, "challenge": null, "error": "No session_id" };
+    }
+
     this.data["session_id"] = licenseData["session_id"];
     let challenge = licenseData["challenge"];
-
-    if (this.verbose) {
-      log("License Request Generated\n", challenge);
-      log("Session ID:", this.data["session_id"]);
-    }
 
     //turn challenge into byte array it's encoded in base64
     challenge = Buffer.from(challenge, "base64");
@@ -75,24 +69,21 @@ class getWvKeys {
       headers: this.headers,
       data: challenge,
       responseType: "arraybuffer",
+      validateStatus: false,
     };
 
     let licenseResponse = await axios(config);
-    // check if response is ok
+
     if (licenseResponse.status !== 200) {
-      log("License Request Failed" + licenseResponse.data.toString(), true);
+      log("License Request Failed - Status: " + licenseResponse.status, true);
+      if (licenseResponse.data) {
+        const responseText = licenseResponse.data.toString().substring(0, 500);
+        log("Response: " + responseText, true);
+      }
       return;
     }
 
-    // encode license response in base64
-    licenseResponse = Buffer.from(licenseResponse.data, "binary").toString(
-      "base64",
-    );
-
-    if (this.verbose) {
-      log("License Response Generated\n" + licenseResponse);
-    }
-
+    licenseResponse = Buffer.from(licenseResponse.data, "binary").toString("base64");
     return licenseResponse;
   }
 
@@ -114,11 +105,9 @@ class getWvKeys {
 
     // check if response is ok
     if (decrypterResponse.status !== 200) {
-      log("License Request Failed" + decrypterResponse.data.toString(), true);
+      log("License Request Failed", true);
       return;
     }
-
-    log("License Response Generated\n" + decrypterResponse.data.toString());
 
     return decrypterResponse.data;
   }
@@ -133,7 +122,7 @@ class getWvKeys {
     const license_response = await this.post_request(licenseData["challenge"]);
     const decrypt_response = await this.decrypter(license_response);
 
-    return decrypt_response["keys"][0];
+    return decrypt_response["keys"][0]["key"];
   }
 }
 
