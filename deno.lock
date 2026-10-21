@@ -1,7 +1,7 @@
 {
   "version": "4",
   "specifiers": {
-    "jsr:@std/assert@1": "1.0.19",
+    "jsr:@std/assert@*": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "npm:axios@^1.15.0": "1.15.0",
     "npm:commander@^14.0.3": "14.0.3",
@@ -172,7 +172,6 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@std/assert@1",
       "npm:axios@^1.15.0",
       "npm:commander@^14.0.3",
       "npm:fast-xml-parser@^5.5.12"

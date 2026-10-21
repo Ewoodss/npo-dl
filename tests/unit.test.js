@@ -3,7 +3,7 @@
  * Tests core functionality without requiring network access
  */
 
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 // Mock data and functions
 const mockEpisodeData = {

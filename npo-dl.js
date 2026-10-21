@@ -106,15 +106,15 @@ async function getEpisodesData(url) {
   const embeddedJsonData = await getEmbededJsonData(url);
   let urlType = urlTypes.UNKNOWN;
   const query = embeddedJsonData.query;
-  if (query.hasOwnProperty("seriesSlug")) {
+  if (Object.hasOwn(query, "seriesSlug")) {
     urlType = urlTypes.SERIES;
-    if (query.hasOwnProperty("seasonSlug")) {
+    if (Object.hasOwn(query, "seasonSlug")) {
       urlType = urlTypes.SEASON;
       if (query.seasonSlug.length > 1) {
         urlType = urlTypes.EPISODE;
       }
     }
-  } else if (query.hasOwnProperty("programSlug")) {
+  } else if (Object.hasOwn(query, "programSlug")) {
     urlType = urlTypes.EPISODE;
   }
 

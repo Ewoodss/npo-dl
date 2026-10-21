@@ -3,8 +3,7 @@
  * Tests real API calls to NPO infrastructure
  * Optional: Requires network access and can be skipped in CI
  */
-
-import { assert, assertEquals, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assert, assertExists } from "jsr:@std/assert";
 
 const TIMEOUT = 30000; // 30 seconds per test
 const ENABLE_NETWORK_TESTS = Deno.env.get("ENABLE_NETWORK_TESTS") === "true";
