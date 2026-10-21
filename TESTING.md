@@ -5,6 +5,7 @@ This document describes how to run tests and set up CI/CD for this project.
 ## Test Types
 
 ### 1. Unit Tests (Default)
+
 Unit tests verify core functionality using mocked data. **No network access required.**
 
 ```bash
@@ -12,6 +13,7 @@ deno test tests/unit.test.js
 ```
 
 **What's tested:**
+
 - Filename generation and sanitization
 - PSSH extraction from MPD structures
 - URL type detection
@@ -24,6 +26,7 @@ deno test tests/unit.test.js
 ---
 
 ### 2. Integration Tests (Optional)
+
 Integration tests verify real connectivity to NPO API endpoints. **Network access required.**
 
 ```bash
@@ -31,6 +34,7 @@ ENABLE_NETWORK_TESTS=true deno test --allow-net tests/integration.test.js
 ```
 
 **What's tested:**
+
 - NPO auth session endpoint
 - Episode page data retrieval
 - Stream API accessibility
@@ -87,6 +91,7 @@ env:
 #### Step 3: Trigger Integration Tests
 
 **Option A: Manual Trigger**
+
 1. Go to **Actions** tab in GitHub
 2. Select **Integration Tests** workflow
 3. Click **Run workflow** button
@@ -96,11 +101,12 @@ Tests run automatically every Sunday at midnight UTC (as configured in `test-int
 
 **Option C: On Release (Optional)**
 To run tests on every release, add this to `.github/workflows/test-integration.yml`:
+
 ```yaml
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 0'
+    - cron: "0 0 * * 0"
   release:
     types: [published]
 ```
@@ -110,6 +116,7 @@ on:
 ## GitHub Actions Workflows
 
 ### 1. Unit Tests (`test.yml`)
+
 - **Trigger:** Every push to `main`
 - **What it does:**
   - Runs unit tests
@@ -119,6 +126,7 @@ on:
 - **API Key Required:** ❌ No
 
 ### 2. Build (`build.yml`)
+
 - **Trigger:** Every push to `main`
 - **What it does:**
   - Compiles CLI for Windows, macOS, Linux
@@ -127,6 +135,7 @@ on:
 - **API Key Required:** ❌ No
 
 ### 3. Integration Tests (`test-integration.yml`)
+
 - **Trigger:** Manual or weekly schedule
 - **What it does:**
   - Tests real NPO API connectivity
@@ -139,6 +148,7 @@ on:
 ## Environment Variables
 
 ### GETWVKEYS_API_KEY
+
 - **Required for:** Widevine key retrieval
 - **Source:** https://getwvkeys.cc/me
 - **In GitHub:** Settings → Secrets and variables → Actions
@@ -146,6 +156,7 @@ on:
 - **Security:** Never logged or exposed in workflow output
 
 ### ENABLE_NETWORK_TESTS
+
 - **Required for:** Integration tests
 - **Default:** `false` (tests skipped if not set)
 - **Set in workflow:** `env: ENABLE_NETWORK_TESTS: 'true'`
@@ -156,12 +167,14 @@ on:
 ## Security Best Practices
 
 ### ✅ DO:
+
 - Store API keys in GitHub Secrets, not in code
 - Use `${{ secrets.SECRET_NAME }}` in workflows
 - Keep API key private and rotate it if compromised
 - Never commit `.env` files or credentials
 
 ### ❌ DON'T:
+
 - Hardcode API keys in workflows or code
 - Share API keys in pull requests or issues
 - Log environment variables to console
@@ -172,15 +185,19 @@ on:
 ## Troubleshooting
 
 ### Integration Tests Fail with "Network Error"
+
 This is expected in environments without internet access (like some CI systems). Tests gracefully skip with a warning.
 
 ### Workflow Shows "API Key Not Found"
+
 1. Check that `GETWVKEYS_API_KEY` secret is added to repository
 2. Verify secret name exactly matches what's in the workflow
 3. Go to Settings → Secrets and verify it's there
 
 ### Tests Pass Locally but Fail in CI
+
 Common causes:
+
 - API key not set in GitHub Secrets
 - Network restrictions in CI environment
 - Different Node.js/Deno versions
@@ -204,7 +221,7 @@ To add new tests:
    ```typescript
    Deno.test({
      name: "Your integration test",
-     fn: async () => { /* ... */ },
+     fn: async () => {/* ... */},
      ignore: !globalThis.ENABLE_NETWORK_TESTS,
    });
    ```
@@ -243,6 +260,7 @@ Integration Tests (manual/weekly)
 ## Questions?
 
 For more information:
+
 - NPO-DL Issues: https://github.com/Ewoodss/npo-dl/issues
 - GETWVKEYS: https://getwvkeys.cc/
 - Deno Testing: https://docs.deno.com/runtime/manual/basics/testing

@@ -8,5 +8,13 @@
     "axios": "npm:axios@^1.15.0",
     "commander": "npm:commander@^14.0.3",
     "fast-xml-parser": "npm:fast-xml-parser@^5.5.12"
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 120,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve"
   }
 }

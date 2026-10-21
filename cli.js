@@ -84,7 +84,7 @@ program.command("download")
           }
         });
       } else {
-        console.log(`\n✓ Downloaded ${result.filter(r => r).length} episode(s)`);
+        console.log(`\n✓ Downloaded ${result.filter((r) => r).length} episode(s)`);
       }
     } catch (error) {
       console.error("Error:", error.message);
@@ -93,7 +93,9 @@ program.command("download")
   });
 
 program
-  .addHelpText("after", `
+  .addHelpText(
+    "after",
+    `
 Examples:
   # Download a single episode
   deno -A cli.js download https://npo.nl/start/afspelen/sluipschutters_184
@@ -105,6 +107,7 @@ Examples:
   deno -A cli.js download https://npo.nl/start/serie/sluipschutters
 
   # Get DRM keys only (no download)
-  deno -A cli.js download --keys-only https://npo.nl/start/afspelen/sluipschutters_184`);
+  deno -A cli.js download --keys-only https://npo.nl/start/afspelen/sluipschutters_184`,
+  );
 
 await program.parseAsync(process.argv);

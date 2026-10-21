@@ -4,7 +4,7 @@
  * Optional: Requires network access and can be skipped in CI
  */
 
-import { assertEquals, assert, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assert, assertEquals, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
 
 const TIMEOUT = 30000; // 30 seconds per test
 const ENABLE_NETWORK_TESTS = Deno.env.get("ENABLE_NETWORK_TESTS") === "true";
@@ -19,8 +19,7 @@ Deno.test({
     try {
       const config = {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+          "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
         },
       };
 
@@ -60,8 +59,7 @@ Deno.test({
       const url = "https://npo.nl/start/afspelen/sluipschutters_184";
       const response = await fetch(url, {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+          "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
         },
       });
 
@@ -116,8 +114,7 @@ Deno.test({
         "https://npo.nl/start/api/auth/session",
         {
           headers: {
-            "User-Agent":
-              "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
           },
         },
       );
@@ -139,8 +136,7 @@ Deno.test({
         {
           method: "POST",
           headers: {
-            "User-Agent":
-              "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
             "Content-Type": "application/json",
             ...(cookies && { "Cookie": cookies }),
           },
@@ -188,8 +184,7 @@ Deno.test({
         `https://npo.nl/start/api/domain/series-seasons?slug=${seriesSlug}`,
         {
           headers: {
-            "User-Agent":
-              "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
           },
         },
       );
@@ -235,8 +230,7 @@ Deno.test({
         method: "POST",
         headers: {
           "Content-Type": "application/octet-stream",
-          "User-Agent":
-            "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+          "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
         },
         body: new Uint8Array(0), // Empty challenge
       });

@@ -1,9 +1,9 @@
 name: Integration Tests
 
 on:
-  workflow_dispatch:  # Allow manual trigger from GitHub UI
+  workflow_dispatch: # Allow manual trigger from GitHub UI
   schedule:
-    - cron: '0 0 * * 0'  # Run weekly on Sunday at midnight UTC
+    - cron: "0 0 * * 0" # Run weekly on Sunday at midnight UTC
 
 jobs:
   integration-test:
@@ -20,7 +20,7 @@ jobs:
 
       - name: Run Integration Tests
         env:
-          ENABLE_NETWORK_TESTS: 'true'
+          ENABLE_NETWORK_TESTS: "true"
           GETWVKEYS_API_KEY: ${{ secrets.GETWVKEYS_API_KEY }}
         run: deno test --allow-net --allow-read tests/integration.test.js
 

@@ -72,11 +72,11 @@ Deno.test("generateFileName removes illegal characters", () => {
   const dirtyEpisodeData = {
     ...mockEpisodeData,
     series: 'Test "Series"',
-    title: 'Episode: <Test>',
+    title: "Episode: <Test>",
   };
 
   const filename = generateFileName(dirtyEpisodeData);
-  assertEquals(filename, 'Test #Series# - S01E01 - Episode# #Test#');
+  assertEquals(filename, "Test #Series# - S01E01 - Episode# #Test#");
 });
 
 /**
@@ -89,7 +89,7 @@ Deno.test("PSSH extraction from mock MPD data", () => {
     MPD: {
       Period: {
         AdaptationSet: [
-          { /* video track */ },
+          {/* video track */},
           {
             ContentProtection: [
               {

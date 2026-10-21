@@ -58,6 +58,7 @@ deno cli.js download <url>
 ```
 
 ## creating binary
+
 ```bash
 deno compile cli.js
 ```

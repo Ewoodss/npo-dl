@@ -2,7 +2,7 @@ import { XMLParser } from "fast-xml-parser";
 import getWvKeys from "./getwvkeys.js";
 import { existsSync, mkdirSync, readFileSync, writeFile } from "node:fs";
 import process from "node:process";
-import { getKeyPath, getVideoPath, fileExists } from "./utils.js";
+import { fileExists, getKeyPath, getVideoPath } from "./utils.js";
 import axios from "axios";
 
 const options = {
@@ -11,8 +11,7 @@ const options = {
 };
 const parser = new XMLParser(options);
 
-const WidevineProxyUrl =
-  "https://drm.npoplayer.nl/proxyEngine.aspx";
+const WidevineProxyUrl = "https://drm.npoplayer.nl/proxyEngine.aspx";
 
 //set as environment variable or replace with your own key
 const authKey = process.env.GETWVKEYS_API_KEY || "";
@@ -55,13 +54,11 @@ const urlTypes = Object.freeze({
   SERIES: "series",
   MOVIE: "movie",
 
-
   UNKNOWN: "unknown",
-})
-
+});
 
 function getDataFromQueries(queries, queryKey) {
-  const query = queries.find(query => query.queryKey[0].includes(queryKey));
+  const query = queries.find((query) => query.queryKey[0].includes(queryKey));
   if (query) {
     return query.state.data;
   }
@@ -69,20 +66,20 @@ function getDataFromQueries(queries, queryKey) {
 }
 
 async function getSeriesData(seriesSlug) {
-  const seasonRespone = await axios.get(`https://npo.nl/start/api/domain/series-seasons?slug=${seriesSlug}`)
-  const seasonQuery = seasonRespone.data
-  const episodesData = []
+  const seasonRespone = await axios.get(`https://npo.nl/start/api/domain/series-seasons?slug=${seriesSlug}`);
+  const seasonQuery = seasonRespone.data;
+  const episodesData = [];
 
-  const seasonDataPromises = []
+  const seasonDataPromises = [];
 
   for (const season of seasonQuery) {
-    const seasonData = getSeasonData(seriesSlug, season.slug)
-    seasonDataPromises.push(seasonData)
+    const seasonData = getSeasonData(seriesSlug, season.slug);
+    seasonDataPromises.push(seasonData);
   }
 
-  const seasonData = await Promise.all(seasonDataPromises)
+  const seasonData = await Promise.all(seasonDataPromises);
   for (const season of seasonData) {
-    episodesData.push(...season)
+    episodesData.push(...season);
   }
 
   return episodesData;
@@ -91,16 +88,16 @@ async function getSeriesData(seriesSlug) {
 async function getSeasonData(seriesSlug, seasonSlug) {
   const embeddedJsonData = await getEmbededJsonData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}`);
   const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState;
-  const episodesQuery = getDataFromQueries(dehydratedState.queries, "programs:season")
+  const episodesQuery = getDataFromQueries(dehydratedState.queries, "programs:season");
 
-  const episodesDataPromises = []
+  const episodesDataPromises = [];
   for (const episode of episodesQuery) {
-    const seriesSlug = episode.series.slug
-    const seasonSlug = episode.season.slug
-    const episodeData = getEpisodeData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}/${episode.slug}`)
-    episodesDataPromises.push(episodeData)
+    const seriesSlug = episode.series.slug;
+    const seasonSlug = episode.season.slug;
+    const episodeData = getEpisodeData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}/${episode.slug}`);
+    episodesDataPromises.push(episodeData);
   }
-  const episodesData = await Promise.all(episodesDataPromises)
+  const episodesData = await Promise.all(episodesDataPromises);
 
   return episodesData;
 }
@@ -110,15 +107,15 @@ async function getEpisodesData(url) {
   let urlType = urlTypes.UNKNOWN;
   const query = embeddedJsonData.query;
   if (query.hasOwnProperty("seriesSlug")) {
-    urlType = urlTypes.SERIES
+    urlType = urlTypes.SERIES;
     if (query.hasOwnProperty("seasonSlug")) {
-      urlType = urlTypes.SEASON
+      urlType = urlTypes.SEASON;
       if (query.seasonSlug.length > 1) {
-        urlType = urlTypes.EPISODE
+        urlType = urlTypes.EPISODE;
       }
     }
   } else if (query.hasOwnProperty("programSlug")) {
-    urlType = urlTypes.EPISODE
+    urlType = urlTypes.EPISODE;
   }
 
   const seriesSlug = query.seriesSlug;
@@ -128,29 +125,30 @@ async function getEpisodesData(url) {
   if (urlType === urlTypes.SERIES) {
     console.log("getting series data");
     return await getSeriesData(seriesSlug);
-  }
-  else if (urlType === urlTypes.SEASON) {
+  } else if (urlType === urlTypes.SEASON) {
     console.log("getting season data");
     return await getSeasonData(seriesSlug, query.seasonSlug[0]);
-  }
-  else if (urlType === urlTypes.EPISODE) {
+  } else if (urlType === urlTypes.EPISODE) {
     console.log("getting episode data");
     const episodeSlug = query.programSlug;
-    return [await getEpisodeData(`https://npo.nl/start/afspelen/${episodeSlug}`)]
-  }
-  else {
+    return [await getEpisodeData(`https://npo.nl/start/afspelen/${episodeSlug}`)];
+  } else {
     throw new Error("Unknown url type");
   }
 }
 
-
 async function getEpisodeData(url) {
   const embeddedJsonData = await getEmbededJsonData(url);
-  const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState
-  const episodeData = getDataFromQueries(dehydratedState.queries, "program:detail")
+  const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState;
+  const episodeData = getDataFromQueries(dehydratedState.queries, "program:detail");
 
   return {
-    productId: episodeData.productId, url: `${url}/afspelen`, series: episodeData.series.title, season: episodeData.season.seasonKey, title: episodeData.title, programKey: episodeData.programKey
+    productId: episodeData.productId,
+    url: `${url}/afspelen`,
+    series: episodeData.series.title,
+    season: episodeData.season.seasonKey,
+    title: episodeData.title,
+    programKey: episodeData.programKey,
   };
 }
 
@@ -177,7 +175,7 @@ async function getJwtToken(productId, config) {
 }
 
 async function getStreamData(url, config) {
-  console.log(`Getting stream data for ${url}`)
+  console.log(`Getting stream data for ${url}`);
   const streamData = await axios.post(
     "https://prod.npoplayer.nl/stream-link",
     {
@@ -194,7 +192,6 @@ async function getStreamData(url, config) {
     return null;
   }
 
-
   return streamData.data;
 }
 
@@ -206,10 +203,8 @@ async function getMpdData(mpdUrl, config) {
 async function getInformation(episodeData) {
   const config = {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
-      "Accept":
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.5",
       "Accept-Encoding": "gzip, deflate, br",
       "Connection": "keep-alive",
@@ -222,10 +217,10 @@ async function getInformation(episodeData) {
 
   const keyExists = await fileExists(keyPath);
   if (keyExists) {
-    console.log(`key exists for ${keyPath}`)
+    console.log(`key exists for ${keyPath}`);
     // read key from file
     const key = readFileSync(keyPath, "utf8");
-    return JSON.parse(key)
+    return JSON.parse(key);
   }
 
   config["headers"]["Cookie"] = await getCookie(config);
@@ -244,9 +239,11 @@ async function getInformation(episodeData) {
   let pssh = "";
   // check if the mpdData contains the necessary information
   if ("ContentProtection" in mpdData["MPD"]["Period"]["AdaptationSet"][1]) {
-    const contentProtections = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"]
+    const contentProtections = mpdData["MPD"]["Period"]["AdaptationSet"][1]["ContentProtection"];
     // filter out where @_value==widevine
-    const widevineContent = contentProtections.filter((contentProtection) => contentProtection["@_value"] === "Widevine")[0]
+    const widevineContent = contentProtections.filter((contentProtection) =>
+      contentProtection["@_value"] === "Widevine"
+    )[0];
     pssh = widevineContent.pssh || "";
   }
 
@@ -298,7 +295,7 @@ async function getWVKeys(pssh, customLicenseUrl) {
       "",
       "https://getwvkeys.cc/pywidevine",
       "",
-      false
+      false,
     );
     js_getWVKeys.getWvKeys().then((result) => {
       success(result);
@@ -334,6 +331,5 @@ function generateFileName(episodeData) {
 
   return filename;
 }
-
 
 export { getCookie, getEpisodesData, getInformation };

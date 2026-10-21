@@ -16,8 +16,7 @@ function getVideoPath() {
   return resolve("./videos") + "/";
 }
 
-const fileExists = async (path) =>
-  !!(await promises.stat(path).catch(() => false));
+const fileExists = async (path) => !!(await promises.stat(path).catch(() => false));
 
 async function deleteFile(path) {
   // check if file exists
@@ -63,12 +62,4 @@ function getKeyPath(filename) {
   return join(getVideoPath(), "/keys/", filename + ".json");
 }
 
-export {
-  deleteFile,
-  fileExists,
-  getKeyPath,
-  getVideoPath,
-  parseBoolean,
-  runCommand,
-  sleep,
-};
+export { deleteFile, fileExists, getKeyPath, getVideoPath, parseBoolean, runCommand, sleep };
