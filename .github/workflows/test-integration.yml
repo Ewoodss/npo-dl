@@ -22,7 +22,7 @@ jobs:
         env:
           ENABLE_NETWORK_TESTS: "true"
           GETWVKEYS_API_KEY: ${{ secrets.GETWVKEYS_API_KEY }}
-        run: deno test --allow-net --allow-read tests/integration.test.js
+        run: deno test --allow-net --allow-read --allow-env tests/integration.test.js
 
       - name: Test Report
         if: always()
