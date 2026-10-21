@@ -122,7 +122,7 @@ class getWvKeys {
     const license_response = await this.post_request(licenseData["challenge"]);
     const decrypt_response = await this.decrypter(license_response);
 
-    return decrypt_response["keys"][0];
+    return decrypt_response["keys"][0]["key"];
   }
 }
 

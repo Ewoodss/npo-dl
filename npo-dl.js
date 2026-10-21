@@ -60,6 +60,14 @@ const urlTypes = Object.freeze({
 })
 
 
+function getDataFromQueries(queries, queryKey) {
+  const query = queries.find(query => query.queryKey[0].includes(queryKey));
+  if (query) {
+    return query.state.data;
+  }
+  return null;
+}
+
 async function getSeriesData(seriesSlug) {
   const seasonRespone = await axios.get(`https://npo.nl/start/api/domain/series-seasons?slug=${seriesSlug}`)
   const seasonQuery = seasonRespone.data
@@ -83,8 +91,7 @@ async function getSeriesData(seriesSlug) {
 async function getSeasonData(seriesSlug, seasonSlug) {
   const embeddedJsonData = await getEmbededJsonData(`https://npo.nl/start/serie/${seriesSlug}/${seasonSlug}`);
   const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState;
-  const episodesQuery = dehydratedState.queries[4].state.data;
-
+  const episodesQuery = getDataFromQueries(dehydratedState.queries, "programs:season")
 
   const episodesDataPromises = []
   for (const episode of episodesQuery) {
@@ -140,9 +147,7 @@ async function getEpisodesData(url) {
 async function getEpisodeData(url) {
   const embeddedJsonData = await getEmbededJsonData(url);
   const dehydratedState = embeddedJsonData.props.pageProps.dehydratedState
-
-  const episodeData = dehydratedState.queries[0].state.data;
-
+  const episodeData = getDataFromQueries(dehydratedState.queries, "program:detail")
 
   return {
     productId: episodeData.productId, url: `${url}/afspelen`, series: episodeData.series.title, season: episodeData.season.seasonKey, title: episodeData.title, programKey: episodeData.programKey
@@ -185,7 +190,7 @@ async function getStreamData(url, config) {
     console.log("Most likely a premium episode, skipping...");
   });
 
-  if (!streamData) {
+  if (!streamData || streamData.status !== 200) {
     return null;
   }
 
@@ -243,7 +248,6 @@ async function getInformation(episodeData) {
     // filter out where @_value==widevine
     const widevineContent = contentProtections.filter((contentProtection) => contentProtection["@_value"] === "Widevine")[0]
     pssh = widevineContent.pssh || "";
-    console.log(pssh)
   }
 
   let widevineProxyUrl = WidevineProxyUrl;
