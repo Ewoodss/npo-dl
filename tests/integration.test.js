@@ -130,6 +130,9 @@ Deno.test({
         .map((c) => c.split(";")[0])
         .join("; ");
 
+      // Consume session response body to prevent leak
+      await sessionResponse.body?.cancel();
+
       // Try to access stream endpoint (may fail for this episode but endpoint should exist)
       const streamResponse = await fetch(
         "https://prod.npoplayer.nl/stream-link",
